@@ -112,6 +112,8 @@ class FFS():
             # Circular (fully illuminated) aperture
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
                 Tx_obsc=params['Tx_obsc'], ptype='circ')
+                
+        return self.pupil
 
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
