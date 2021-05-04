@@ -1,7 +1,7 @@
 import numpy
 from . import funcs
 from . import ao_power_spectra
-from aotools import circle
+from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
 
 class FFS():
@@ -77,6 +77,10 @@ class FFS():
             numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
                          numpy.sin(numpy.radians(self.wind_dir))])).T
 
+        self.r0 = cn2_to_r0(params['CN2_TURB'].sum(), lamda=500e-9)
+        self.theta0 = isoplanaticAngle(params['CN2_TURB'], params['H_TURB'], lamda=500e-9)
+        self.tau0 = coherenceTime(params['CN2_TURB'], params['WIND_SPD'], lamda=500e-9)
+
     def init_beam_params(self, params):
         self.W0 = params['W0']
         self.F0 = params['F0']
@@ -112,7 +116,7 @@ class FFS():
             # Circular (fully illuminated) aperture
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
                 Tx_obsc=params['Tx_obsc'], ptype='circ')
-                
+
         return self.pupil
 
     def compute_powerspec(self):
@@ -192,6 +196,9 @@ class FFS():
         hdr['DX'] = self.dx
         hdr['NPXLS'] = self.Npxls
         hdr['NITER'] = self.Niter
+        hdr['R0'] = self.r0
+        hdr['THETA0'] = self.theta0
+        hdr['TAU0'] = self.tau0
         return hdr
 
     def save(self, fname, **kwargs):
