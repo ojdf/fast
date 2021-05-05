@@ -43,6 +43,7 @@ p = {
 'DSUBAP': 0.02,                             # WFS subaperture pitch [m]
 'TLOOP': 0.001,                             # AO loop delay [s]
 'TEXP': 0.001,                              # WFS exposure time
+'ALIAS': True,                              # Include WFS aliasing
 'ZMAX': None
 
 }

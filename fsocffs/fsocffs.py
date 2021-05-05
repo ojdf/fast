@@ -80,6 +80,8 @@ class FFS():
         self.r0 = cn2_to_r0(params['CN2_TURB'].sum(), lamda=500e-9)
         self.theta0 = isoplanaticAngle(params['CN2_TURB'], params['H_TURB'], lamda=500e-9)
         self.tau0 = coherenceTime(params['CN2_TURB'], params['WIND_SPD'], lamda=500e-9)
+        self.L0 = params['L0']
+        self.l0 = params['l0']
 
     def init_beam_params(self, params):
         self.W0 = params['W0']
@@ -101,6 +103,7 @@ class FFS():
         self.tloop = params['TLOOP']
         self.texp = params['TEXP']
         self.Zmax = params['ZMAX']
+        self.alias = params['ALIAS']
 
     def init_pupil_mask(self, params):
         if params['PROP_DIR'] is 'up':
@@ -121,27 +124,42 @@ class FFS():
 
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
-            self.fabs, self.cn2, self.params['L0'], self.params['l0'], C=self.params['C'])
+            self.fabs, self.cn2, self.L0, self.l0, C=self.params['C'])
 
         self.G_ao = ao_power_spectra.G_AO_Jol(
             self.fabs, self.fx, self.fy, self.ao_mode, self.h, 
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
             self.tloop, self.texp, self.Dsubap)
 
+        if self.alias:
+            self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
+                self.fabs, self.fx, self.fy, self.Dsubap, self.cn2, self.wind_vector,
+                self.texp, self.wvl, lmax=10, kmax=10, L0=self.L0, l0=self.l0)
+        else:
+            self.alias_powerspec = 0.
+
         self.powerspec = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-            self.turb_powerspec * self.G_ao, self.h, layer=self.params['LAYER'])
+            self.turb_powerspec * self.G_ao + self.alias_powerspec, self.h, layer=self.params['LAYER'])
 
         if self.subharmonics:
             turb_lo = funcs.turb_powerspectrum_vonKarman(
-                self.fabs_subharm, self.cn2, self.params['L0'], self.params['l0'], C=self.params['C'])
+                self.fabs_subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
 
             G_ao_lo = ao_power_spectra.G_AO_Jol(
                 self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.ao_mode, self.h, 
                 self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap)
 
+            if self.alias:
+                alias_subharm = ao_power_spectra.Jol_alias_openloop(
+                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap, 
+                    self.cn2, self.wind_vector, self.texp, self.wvl, lmax=10, kmax=10,
+                    L0=self.L0, l0=self.l0)
+            else:
+                alias_subharm = 0.
+
             self.powerspec_subharm = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-                turb_lo * G_ao_lo, self.h, layer=self.params['LAYER'])
+                turb_lo * G_ao_lo + alias_subharm, self.h, layer=self.params['LAYER'])
         else:
             self.powerspec_subharm = None
 
@@ -158,7 +176,7 @@ class FFS():
             pupil = self.pupil
 
         logamp_var = funcs.logamp_var(pupil, self.dx, self.h, self.cn2, self.wvl,
-            self.params['L0'], self.params['l0'])
+            self.L0, self.l0)
         self.rand_logamp = numpy.random.normal(
             loc=0, scale=numpy.sqrt(logamp_var), size=(self.Niter,))
 

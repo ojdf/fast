@@ -144,9 +144,10 @@ def turb_powerspectrum_vonKarman(fabs, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     except TypeError:
         power_spec = numpy.array([0.033 * cn2 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.) ])
 
-    # If infinite outer scale, set central pixel to 0
-    if numpy.isinf(L0):
-        power_spec[:,int(power_spec.shape[1]/2), int(power_spec.shape[2]/2)] = 0.
+    # Set any infinite values to 0
+    power_spec[numpy.isinf(power_spec)] = 0.
+    # if numpy.isinf(L0) and fabs[midpt,midpt] == 0:
+    #     power_spec[:,int(power_spec.shape[1]/2), int(power_spec.shape[2]/2)] = 0.
     return power_spec 
 
 def calc_gaussian_beam_parameters(z, F_0, W_0, wvl):

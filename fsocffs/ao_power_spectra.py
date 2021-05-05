@@ -108,6 +108,45 @@ def mask_lf(fx, fy, d_DM):
 def mask_hf(fx, fy, d_DM):
     return numpy.invert(mask_lf(fx, fy, d_DM))
 
+def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
+    ls = numpy.arange(-lmax, lmax+1)
+    ks = numpy.arange(-kmax, kmax+1)
+    alias = numpy.zeros((len(p), *fabs.shape))
+    midpt = int(fx.shape[-1]/2.)
+
+    fx_tile = numpy.tile(fx, (len(p),*[1]*fx.ndim))
+    fy_tile = numpy.tile(fy, (len(p),*[1]*fx.ndim))
+
+    if v is not None:
+        v_dot_kappa = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
+    else:
+        v_dot_kappa = 0
+
+    sinc_term = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))**2
+
+    #TODO: the central pixel may still be wrong
+    for l in ls:
+        for k in ks:
+            if l == 0 and k == 0:
+                continue
+            fx_shift = fx - 2*numpy.pi * k/Dsubap
+            fy_shift = fy - 2*numpy.pi * l/Dsubap
+            fabs_shift = numpy.sqrt(fx_shift**2 + fy_shift**2)
+            term_1 = (fx/(fy_shift) + fy/(fx_shift))**2
+            term_2 = funcs.turb_powerspectrum_vonKarman(fabs_shift, p, L0=L0, l0=l0)
+            mult = term_1 * term_2 *  fx**2 * fy**2 / fabs**4
+            mult[:,midpt,midpt] = 0.
+            if l == 0:
+                mult[:,midpt,:] = term_2[:,midpt,:]
+            if k == 0:
+                mult[:,:,midpt] = term_2[:,:,midpt]
+                mult[:,midpt,midpt] = term_2[:,midpt,midpt]
+            alias += mult
+
+    alias *= sinc_term 
+
+    return alias * mask_lf(fx, fy, Dsubap)
+
 def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
             wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None):
     if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA', 'Z_PA']:
