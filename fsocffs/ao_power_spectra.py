@@ -108,6 +108,14 @@ def mask_lf(fx, fy, d_DM):
 def mask_hf(fx, fy, d_DM):
     return numpy.invert(mask_lf(fx, fy, d_DM))
 
+def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance):
+    N = noise_variance * (Dsubap/(2*numpy.pi))**2
+    powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
+    midpt = int(powerspec.shape[-1]/2.)
+    powerspec[midpt, midpt] = 0.
+    mask = mask_lf(fx, fy, Dsubap)
+    return mask * powerspec
+
 def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
@@ -176,7 +184,7 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         v_dot_kappa = 0
 
     term_1 = 2 * numpy.cos(delta_r_dot_kappa - tl * v_dot_kappa)
-    term_2 = numpy.sinc(Delta_t * v_dot_kappa)
+    term_2 = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))
 
     aniso = 1 - term_1 * term_2 + term_2**2
 
@@ -189,7 +197,7 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     if mode is 'LGS_PA':
         term_1_lgs = 2 * numpy.cos(-tl * v_dot_kappa)
-        term_2_lgs = numpy.sinc(Delta_t * v_dot_kappa)
+        term_2_lgs = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))
         aniso_lgs = 1 - term_1_lgs * term_2_lgs + term_2_lgs**2
         Z = zernike_squared_filter(fabs, fx, fy, Tx, 4, n_noll_start=1).real
         return mask * (Z * aniso + (1-Z) * aniso_lgs) + (1-mask)
@@ -199,7 +207,7 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         Z = zernike_squared_filter(fabs, fx, fy, Tx, Zmax, n_noll_start=1).real
         return (Z*aniso)+ (1-Z)
 
-def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None):
+def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
     if mode is 'perfect':
         return 1.
 
@@ -213,8 +221,14 @@ def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None):
 def G_AO_Jol_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloop=1., v=None, 
                         dsubap=None, DM='perfect', Zmax=None, D=None, nu=1):
 
-    Gamma_DM = DM_transfer_function(fx, fy, fabs, mode=DM, Zmax=Zmax, D=D)
+    Gamma_DM = DM_transfer_function(fx, fy, fabs, mode=DM, Zmax=Zmax, D=D, dsubap=dsubap)
     
+    # convert to linear spatial frequencies because I can't be bothered to convert
+    # the long expressions below 
+    fx = fx.copy()/(2*numpy.pi)
+    fy = fy.copy()/(2*numpy.pi)
+    fabs = fabs.copy()/(2*numpy.pi)
+
     fx_tile = numpy.tile(fx, (len(h),1,1))
     fy_tile = numpy.tile(fy, (len(h),1,1))
 
@@ -237,7 +251,7 @@ def G_AO_Jol_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloop=
                 + gloop * Gamma_DM * numpy.sinc(Delta_t * v_dot_f) * (numpy.cos(2*numpy.pi*(Delta_t/2 + tl) * v_dot_f) - 
                 numpy.cos(2*numpy.pi * (Delta_t/2. - tl) * v_dot_f)) 
                 
-                - gloop**2 * Gamma_DM**3 * numpy.sinc(Delta_t * v_dot_f)**2 * nu * numpy.cos(numpy.pi * delta_r_dot_f))
+                - gloop**2 * Gamma_DM**3 * numpy.sinc(Delta_t * v_dot_f)**2 * nu * numpy.cos(2 * numpy.pi * delta_r_dot_f))
 
     F_AS_bottom = (1 + gloop**2 * Gamma_DM**2 * numpy.sinc(Delta_t * v_dot_f)**2/2. 
                     

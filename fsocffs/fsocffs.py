@@ -104,6 +104,7 @@ class FFS():
         self.texp = params['TEXP']
         self.Zmax = params['ZMAX']
         self.alias = params['ALIAS']
+        self.noise = params['NOISE']
 
     def init_pupil_mask(self, params):
         if params['PROP_DIR'] is 'up':
@@ -138,8 +139,15 @@ class FFS():
         else:
             self.alias_powerspec = 0.
 
+        if self.noise > 0:
+            self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
+                self.fabs, self.fx, self.fy, self.Dsubap, self.noise)
+        else:
+            self.noise_powerspec = 0.
+
         self.powerspec = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-            self.turb_powerspec * self.G_ao + self.alias_powerspec, self.h, layer=self.params['LAYER'])
+            self.turb_powerspec * self.G_ao + self.alias_powerspec, self.h, 
+            layer=self.params['LAYER']) + self.noise_powerspec
 
         if self.subharmonics:
             turb_lo = funcs.turb_powerspectrum_vonKarman(
@@ -158,8 +166,16 @@ class FFS():
             else:
                 alias_subharm = 0.
 
+            if self.noise > 0:
+                noise_subharm = ao_power_spectra.Jol_noise_openloop(
+                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap,
+                    self.noise)
+            else:
+                noise_subharm = 0.
+
             self.powerspec_subharm = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-                turb_lo * G_ao_lo + alias_subharm, self.h, layer=self.params['LAYER'])
+                turb_lo * G_ao_lo + alias_subharm, self.h, layer=self.params['LAYER']) \
+                + noise_subharm
         else:
             self.powerspec_subharm = None
 
@@ -207,6 +223,8 @@ class FFS():
         hdr['TLOOP'] = params['TLOOP'] 
         hdr['TEXP'] = params['TEXP']
         hdr['DSUBAP'] = params['DSUBAP'] 
+        hdr['ALIAS'] = str(params['ALIAS'])
+        hdr['NOISE'] = params['NOISE']
         hdr['TX'] = params['Tx']
         hdr['TX_OBSC'] = params['Tx_obsc']
         hdr['AXICON'] = str(params['AXICON'])
