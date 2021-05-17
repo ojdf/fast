@@ -101,22 +101,26 @@ def piston_tiptilt_filter(fabs, D):
     filt[int(fabs.shape[0]/2), int(fabs.shape[1]/2)] = 0
     return filt
 
-def mask_lf(fx, fy, d_DM):
+def mask_lf(fx, fy, d_DM, modal=False):
     fmax = numpy.pi/d_DM
-    return numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
+    if modal:
+        f = numpy.sqrt(fx**2 + fy**2)
+        return f <= fmax
+    else:
+        return numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
 
-def mask_hf(fx, fy, d_DM):
-    return numpy.invert(mask_lf(fx, fy, d_DM))
+def mask_hf(fx, fy, d_DM, modal=False):
+    return numpy.invert(mask_lf(fx, fy, d_DM, modal=modal))
 
-def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance):
-    N = noise_variance * (Dsubap/(2*numpy.pi))**2
+def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, modal=False, modal_mult=1):
+    N = noise_variance #* (Dsubap/(2*numpy.pi))**2
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
     midpt = int(powerspec.shape[-1]/2.)
     powerspec[midpt, midpt] = 0.
-    mask = mask_lf(fx, fy, Dsubap)
+    mask = mask_lf(fx, fy, Dsubap/modal_mult, modal=modal)
     return mask * powerspec
 
-def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
+def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6, modal=False, modal_mult=1):
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
     alias = numpy.zeros((len(p), *fabs.shape))
@@ -143,20 +147,22 @@ def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, 
             term_1 = (fx/(fy_shift) + fy/(fx_shift))**2
             term_2 = funcs.turb_powerspectrum_vonKarman(fabs_shift, p, L0=L0, l0=l0)
             mult = term_1 * term_2 *  fx**2 * fy**2 / fabs**4
-            mult[:,midpt,midpt] = 0.
+            mult[...,midpt,midpt] = 0.
             if l == 0:
-                mult[:,midpt,:] = term_2[:,midpt,:]
+                mult[...,midpt,:] = term_2[...,midpt,:]
             if k == 0:
-                mult[:,:,midpt] = term_2[:,:,midpt]
-                mult[:,midpt,midpt] = term_2[:,midpt,midpt]
+                mult[...,midpt] = term_2[...,midpt]
+                mult[...,midpt,midpt] = term_2[...,midpt,midpt]
             alias += mult
 
     alias *= sinc_term 
 
-    return alias * mask_lf(fx, fy, Dsubap)
+    alias[...,mask_hf(fx,fy,Dsubap/modal_mult,modal=modal)] = 0.
+
+    return alias
 
 def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
-            wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None):
+            wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1):
     if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA', 'Z_PA']:
         raise Exception('Mode not recognised')
 
@@ -164,7 +170,7 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         return 1 
 
     if Dsubap is not None:
-        mask = mask_lf(fx, fy, Dsubap)
+        mask = mask_lf(fx, fy, Dsubap/modal_mult, modal=modal)
     else:
         mask = 1 
 
@@ -219,7 +225,7 @@ def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
         # TODO add more functions 
 
 def G_AO_Jol_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloop=1., v=None, 
-                        dsubap=None, DM='perfect', Zmax=None, D=None, nu=1):
+                        dsubap=None, DM='perfect', Zmax=None, D=None, nu=1, modal=False, modal_mult=1):
 
     Gamma_DM = DM_transfer_function(fx, fy, fabs, mode=DM, Zmax=Zmax, D=D, dsubap=dsubap)
     

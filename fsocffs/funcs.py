@@ -288,3 +288,19 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
 
     else:
         raise Exception('ptype must be one of "circ", "gauss" or "axicon"')
+
+def temporal_powerspec(N, dt, v, cn2, L0=numpy.inf, l0=1e-6):
+    dx = v * dt
+    df = 2*numpy.pi / (N * v * dt)
+    f = numpy.arange(-N/2, N/2) * df
+    fx, fy = numpy.meshgrid(f,f)
+    fabs = numpy.sqrt(fx**2 + fy**2)
+    
+    powerspec = turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0)
+
+    # integrate along orthogonal wind (y) axis
+    powerspec_temporal = simps(powerspec, dx=df, axis=1)
+
+    powerspec_temporal /= simps(powerspec_temporal, dx=df, axis=1)
+
+    return powerspec_temporal

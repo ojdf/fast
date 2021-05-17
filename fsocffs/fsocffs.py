@@ -105,6 +105,8 @@ class FFS():
         self.Zmax = params['ZMAX']
         self.alias = params['ALIAS']
         self.noise = params['NOISE']
+        self.modal = params['MODAL']
+        self.modal_mult = params['MODAL_MULT']
 
     def init_pupil_mask(self, params):
         if params['PROP_DIR'] is 'up':
@@ -130,18 +132,18 @@ class FFS():
         self.G_ao = ao_power_spectra.G_AO_Jol(
             self.fabs, self.fx, self.fy, self.ao_mode, self.h, 
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
-            self.tloop, self.texp, self.Dsubap)
+            self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
         if self.alias:
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.fabs, self.fx, self.fy, self.Dsubap, self.cn2, self.wind_vector,
-                self.texp, self.wvl, lmax=10, kmax=10, L0=self.L0, l0=self.l0)
+                self.texp, self.wvl, 10, 10, self.L0, self.l0, self.modal, self.modal_mult)
         else:
             self.alias_powerspec = 0.
 
         if self.noise > 0:
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
-                self.fabs, self.fx, self.fy, self.Dsubap, self.noise)
+                self.fabs, self.fx, self.fy, self.Dsubap, self.noise, self.modal, self.modal_mult)
         else:
             self.noise_powerspec = 0.
 
@@ -150,32 +152,32 @@ class FFS():
             layer=self.params['LAYER']) + self.noise_powerspec
 
         if self.subharmonics:
-            turb_lo = funcs.turb_powerspectrum_vonKarman(
+            self.turb_lo = funcs.turb_powerspectrum_vonKarman(
                 self.fabs_subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
 
-            G_ao_lo = ao_power_spectra.G_AO_Jol(
+            self.G_ao_lo = ao_power_spectra.G_AO_Jol(
                 self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.ao_mode, self.h, 
                 self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
-                self.tloop, self.texp, self.Dsubap)
+                self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
             if self.alias:
-                alias_subharm = ao_power_spectra.Jol_alias_openloop(
+                self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
                     self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap, 
-                    self.cn2, self.wind_vector, self.texp, self.wvl, lmax=10, kmax=10,
-                    L0=self.L0, l0=self.l0)
+                    self.cn2, self.wind_vector, self.texp, self.wvl, 10, 10,
+                    self.L0, self.l0, self.modal, self.modal_mult)
             else:
-                alias_subharm = 0.
+                self.alias_subharm = 0.
 
             if self.noise > 0:
-                noise_subharm = ao_power_spectra.Jol_noise_openloop(
-                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap,
-                    self.noise)
+                self.noise_subharm = ao_power_spectra.Jol_noise_openloop(
+                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, 
+                    self.Dsubap, self.noise, self.modal, self.modal_mult)
             else:
-                noise_subharm = 0.
+                self.noise_subharm = 0.
 
             self.powerspec_subharm = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-                turb_lo * G_ao_lo + alias_subharm, self.h, layer=self.params['LAYER']) \
-                + noise_subharm
+                self.turb_lo * self.G_ao_lo + self.alias_subharm, self.h, layer=self.params['LAYER']) \
+                + self.noise_subharm
         else:
             self.powerspec_subharm = None
 
@@ -198,9 +200,14 @@ class FFS():
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
 
+        self.diffraction_limit = numpy.abs(pupil.sum() * self.dx**2)**2
+
         self.I = numpy.exp(2 * self.rand_logamp) * numpy.abs(phase_component)**2
 
-        self.I /= (self.wvl * self.L)**2
+        if self.params['PROP_DIR'] is 'up':
+            # Far field intensity
+            self.I /= (self.wvl * self.L)**2
+            self.diffraction_limit /= (self.wvl * self.L)**2
 
         return self.I
 

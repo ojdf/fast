@@ -45,6 +45,8 @@ p = {
 'TEXP': 0.001,                              # WFS exposure time
 'ALIAS': True,                              # Include WFS aliasing
 'NOISE': 1.,                                # WFS noise [rad^2]
+'MODAL': False,                             # Modal (True) or Zonal (False) correction
+'MODAL_MULT': 1,                            # Multiplier to reduce number of modes if required
 'ZMAX': None
 
 }
