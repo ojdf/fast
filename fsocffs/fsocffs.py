@@ -16,6 +16,7 @@ class FFS():
         '''
         self.params = params
         self.Niter = params['NITER']
+        self.fftw = params['FFTW']
 
         self.init_atmos(self.params)
         self.init_frequency_grid(self.params)
@@ -185,7 +186,7 @@ class FFS():
         self.phs = funcs.make_phase_fft(
             self.Niter, self.powerspec, self.df, self.subharmonics,
             self.powerspec_subharm, self.fx_subharm, self.fy_subharm, 
-            self.fabs_subharm, self.dx)
+            self.fabs_subharm, self.dx, self.fftw)
 
         return self.phs
 

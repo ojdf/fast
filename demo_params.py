@@ -16,6 +16,7 @@ p = {
 'DX': 'auto',                               # Pixel scale (can be "auto") [m/pixel] 
 'NITER': 100,                               # Number of random iterations
 'SUBHARM': True,                            # Include subharmonics
+'FFTW': False,
 
 'W0': (1.016-0.35)/2/numpy.sqrt(8),         # 1/e^2 launch beam radius [m]
 'F0': numpy.inf,                            # Launch beam radius of curvature [m]

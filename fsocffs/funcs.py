@@ -4,6 +4,7 @@ from scipy.integrate import simps
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
+import pyfftw
 mp_kv = numpy.frompyfunc(mpmath.besselk, 2, 1)
 mp_arraypower = numpy.frompyfunc(mpmath.power, 2, 1)
 
@@ -204,11 +205,19 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     return integral
 
 def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=None,
-                    fys_lo=None, fabss_lo=None, dx=None):
+                    fys_lo=None, fabss_lo=None, dx=None, fftw=False):
 
     rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
 
-    phasescrn = fouriertransform.ft2(numpy.sqrt(powerspec)*rand*df, 1).real
+    if fftw:
+        fftw_in = pyfftw.empty_aligned(rand.shape, dtype='complex128')
+        fftw_out = pyfftw.empty_aligned(rand.shape, dtype='complex128')
+        fftw_obj = pyfftw.FFTW(fftw_in, fftw_out, axes=((-1,-2)))
+        fftw_in[:] = numpy.fft.fftshift(numpy.sqrt(powerspec) * rand * df, axes=(-1,-2))
+        phasescrn = numpy.fft.fftshift(fftw_obj(), axes=(-1,-2)).real
+
+    else:
+        phasescrn = fouriertransform.ft2(numpy.sqrt(powerspec)*rand*df, 1).real
 
     if sh:
         # subharmonics
@@ -235,11 +244,16 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
                         + 1j * numpy.random.normal(0,1,size=(Nscrns,3,3))) \
                              * numpy.sqrt(powerspec_lo) * df_lo
 
-            SH = numpy.zeros((Nscrns,N,N), dtype='complex')
+            modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
+                                  + y[numpy.newaxis,numpy.newaxis,...] * fy_lo[...,numpy.newaxis,numpy.newaxis]))
 
-            for i in range(3):
-                for j in range(3):
-                    SH += (rand_lo[:,i,j] * numpy.tile(numpy.exp(1j * (fx_lo[i,j]*x + fy_lo[i,j]*y)), (Nscrns,1,1)).T).T
+            SH = (rand_lo[...,numpy.newaxis,numpy.newaxis] * modes).sum((1,2))
+
+            # old, slightly slower method
+            # SH = numpy.zeros((Nscrns,N,N), dtype='complex')
+            # for i in range(3):
+            #     for j in range(3):
+            #         SH += (rand_lo[:,i,j] * numpy.tile(numpy.exp(1j * (fx_lo[i,j]*x + fy_lo[i,j]*y)), (Nscrns,1,1)).T).T
 
             phs_lo = phs_lo + SH
 
