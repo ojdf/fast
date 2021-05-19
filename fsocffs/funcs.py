@@ -230,6 +230,10 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
             coords = coords[:-1]
         x, y = numpy.meshgrid(coords, coords)
 
+        # preallocate data arrays
+        SH = numpy.empty((Nscrns,N,N), dtype='complex')
+        tmp = numpy.empty((Nscrns,3,3,N,N), dtype='complex')
+
         for i,p in enumerate(range(1,4)):
             df_lo = 2*numpy.pi/(3**p * D)
             fx_lo = fxs_lo[i]
@@ -247,7 +251,8 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
             modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
                                   + y[numpy.newaxis,numpy.newaxis,...] * fy_lo[...,numpy.newaxis,numpy.newaxis]))
 
-            SH = (rand_lo[...,numpy.newaxis,numpy.newaxis] * modes).sum((1,2))
+            numpy.multiply(rand_lo[...,numpy.newaxis,numpy.newaxis], modes, out=tmp)
+            numpy.sum(tmp, axis=(1,2), out=SH)
 
             # old, slightly slower method
             # SH = numpy.zeros((Nscrns,N,N), dtype='complex')
