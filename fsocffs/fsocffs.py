@@ -3,6 +3,7 @@ from . import funcs
 from . import ao_power_spectra
 from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
+from tqdm import tqdm
 
 class FFS():
     def __init__(self, params):
@@ -16,7 +17,11 @@ class FFS():
         '''
         self.params = params
         self.Niter = params['NITER']
+        self.Nchunks = params['NCHUNKS']
         self.fftw = params['FFTW']
+
+        if self.Niter % self.Nchunks != 0:
+            raise Exception('NCHUNKS must divite NITER without remainder')
 
         self.init_atmos(self.params)
         self.init_frequency_grid(self.params)
@@ -183,10 +188,15 @@ class FFS():
             self.powerspec_subharm = None
 
     def compute_scrns(self):
-        self.phs = funcs.make_phase_fft(
-            self.Niter, self.powerspec, self.df, self.subharmonics,
-            self.powerspec_subharm, self.fx_subharm, self.fy_subharm, 
-            self.fabs_subharm, self.dx, self.fftw)
+        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape))
+
+        chunk_iters = int(self.Niter/self.Nchunks)
+
+        for i in tqdm(range(self.Nchunks)):
+            self.phs[i*chunk_iters:(i+1)*chunk_iters] = funcs.make_phase_fft(
+                chunk_iters, self.powerspec, self.df, self.subharmonics,
+                self.powerspec_subharm, self.fx_subharm, self.fy_subharm, 
+                self.fabs_subharm, self.dx, self.fftw)
 
         return self.phs
 
