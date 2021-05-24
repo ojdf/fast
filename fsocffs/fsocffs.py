@@ -46,7 +46,9 @@ class FFS():
             nyq_paa = numpy.pi / (self.h[-1] * self.paa/206265.) # nyquist sampling of highest spatial frequency required ()
             nyq_temp = numpy.pi / (max(self.wind_speed) * params['TLOOP'])
             nyq = numpy.min([nyq_paa, nyq_temp])
-            self.Npxls = int(2*numpy.ceil(2*numpy.pi/(nyq * self.dx)/2)) # ensure even
+            nyq_Npxls = int(2*numpy.ceil(2*numpy.pi/(nyq * self.dx)/2)) # ensure even
+            ap_Npxls = int(2*numpy.ceil(params['Tx']/self.dx/2))
+            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
         else:
             self.Npxls = params['NPXLS']
 
