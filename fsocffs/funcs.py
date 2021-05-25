@@ -1,6 +1,7 @@
 import numpy
 from scipy.special import erfc
 from scipy.integrate import simps
+from scipy.optimize import minimize_scalar
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
@@ -307,6 +308,27 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
 
     else:
         raise Exception('ptype must be one of "circ", "gauss" or "axicon"')
+
+def optimize_fibre(pupil, dx, size_min=None, size_max=None):
+    N = pupil.shape[-1]
+
+    if size_max is None:
+        size_max = N * dx
+
+    if size_min is None:
+        size_min = dx
+
+    def _opt_func(W):
+        return coupling_loss(W, N, pupil, dx)
+
+    opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
+    
+    return gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
+
+def coupling_loss(W, N, pupil, dx):
+    fibre_field = gaussian2d(N, W/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi*W**2))
+    coupling = numpy.abs((fibre_field * pupil).sum() * dx**2)**2
+    return 1 - coupling
 
 def temporal_powerspec(N, dt, v, cn2, L0=numpy.inf, l0=1e-6):
     dx = v * dt

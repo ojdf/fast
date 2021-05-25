@@ -131,6 +131,14 @@ class FFS():
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
                 Tx_obsc=params['Tx_obsc'], ptype='circ')
 
+        if params['SMF']:
+            # compute optimal SMF parameters
+            self.smf = True
+            self.fibre_efield = funcs.optimize_fibre(self.pupil, self.dx)
+        else:
+            self.smf = False
+            self.fibre_efield = 1.
+
         return self.pupil
 
     def compute_powerspec(self):
@@ -204,7 +212,7 @@ class FFS():
 
     def compute_I(self, pupil=None):
         if pupil is None:
-            pupil = self.pupil
+            pupil = self.pupil * self.fibre_efield
 
         logamp_var = funcs.logamp_var(pupil, self.dx, self.h, self.cn2, self.wvl,
             self.L0, self.l0)
