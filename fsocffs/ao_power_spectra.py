@@ -101,26 +101,33 @@ def piston_tiptilt_filter(fabs, D):
     filt[int(fabs.shape[0]/2), int(fabs.shape[1]/2)] = 0
     return filt
 
-def mask_lf(fx, fy, d_DM, modal=False):
-    fmax = numpy.pi/d_DM
+def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None):
+    fmax = numpy.pi/d_WFS
+    wfs_space = numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
     if modal:
-        f = numpy.sqrt(fx**2 + fy**2)
-        return f <= fmax
+        fabs = numpy.sqrt(fx**2 + fy**2)
+        if Zmax is None:
+            dm_space = fabs <= fmax * modal_mult
+        else:
+            dm_space = zernike_squared_filter(fabs, fx, fy, D, Zmax).real
     else:
-        return numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
+        dm_space = wfs_space
 
-def mask_hf(fx, fy, d_DM, modal=False):
-    return numpy.invert(mask_lf(fx, fy, d_DM, modal=modal))
+    mask = wfs_space * dm_space
+    return mask
 
-def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, modal=False, modal_mult=1):
+def mask_hf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None):
+    return 1 - mask_lf(fx, fy, d_WFS, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D)
+
+def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, modal=False, modal_mult=1, Zmax=None, D=None):
     N = noise_variance #* (Dsubap/(2*numpy.pi))**2
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
     midpt = int(powerspec.shape[-1]/2.)
     powerspec[midpt, midpt] = 0.
-    mask = mask_lf(fx, fy, Dsubap/modal_mult, modal=modal)
+    mask = mask_lf(fx, fy, Dsubap, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D)
     return mask * powerspec
 
-def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6, modal=False, modal_mult=1):
+def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6, modal=False, modal_mult=1, Zmax=None, D=None):
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
     alias = numpy.zeros((len(p), *fabs.shape))
@@ -157,20 +164,20 @@ def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, 
 
     alias *= sinc_term 
 
-    alias[...,mask_hf(fx,fy,Dsubap/modal_mult,modal=modal)] = 0.
+    alias *= mask_lf(fx,fy,Dsubap,modal=modal,modal_mult=modal_mult,Zmax=Zmax,D=D)
 
     return alias
 
 def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
             wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1):
-    if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA', 'Z_PA']:
+    if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA']:
         raise Exception('Mode not recognised')
 
     if mode is 'NOAO':
         return 1 
 
     if Dsubap is not None:
-        mask = mask_lf(fx, fy, Dsubap/modal_mult, modal=modal)
+        mask = mask_lf(fx, fy, Dsubap, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=Tx)
     else:
         mask = 1 
 
@@ -194,12 +201,8 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     aniso = 1 - term_1 * term_2 + term_2**2
 
-    if mode is 'AO_PA':
+    if mode is 'AO_PA' or mode is 'TT_PA':
         return aniso * mask + (1-mask)
-
-    if mode is 'TT_PA':
-        Z = zernike_squared_filter(fabs, fx, fy, Tx, 3, n_noll_start=1).real
-        return (Z * aniso + (1-Z))
 
     if mode is 'LGS_PA':
         term_1_lgs = 2 * numpy.cos(-tl * v_dot_kappa)
@@ -208,10 +211,7 @@ def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         Z = zernike_squared_filter(fabs, fx, fy, Tx, 4, n_noll_start=1).real
         return mask * (Z * aniso + (1-Z) * aniso_lgs) + (1-mask)
 
-    if mode is 'Z_PA':
-        pist = piston_filter(fabs, Tx)
-        Z = zernike_squared_filter(fabs, fx, fy, Tx, Zmax, n_noll_start=1).real
-        return (Z*aniso)+ (1-Z)
+    raise Exception("Shouldn't be here")
 
 def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
     if mode is 'perfect':

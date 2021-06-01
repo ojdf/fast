@@ -116,6 +116,12 @@ class FFS():
         self.modal = params['MODAL']
         self.modal_mult = params['MODAL_MULT']
 
+        if self.ao_mode == 'TT_PA':
+            # force modal correction with tip/tilt
+            self.Zmax = 3
+            self.modal = True
+            self.modal_mult = 1
+
     def init_pupil_mask(self, params):
         if params['PROP_DIR'] is 'up':
             # Gaussian aperture
@@ -153,13 +159,15 @@ class FFS():
         if self.alias:
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.fabs, self.fx, self.fy, self.Dsubap, self.cn2, self.wind_vector,
-                self.texp, self.wvl, 10, 10, self.L0, self.l0, self.modal, self.modal_mult)
+                self.texp, self.wvl, 10, 10, self.L0, self.l0, self.modal, self.modal_mult,
+                self.Zmax, self.Tx)
         else:
             self.alias_powerspec = 0.
 
         if self.noise > 0:
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
-                self.fabs, self.fx, self.fy, self.Dsubap, self.noise, self.modal, self.modal_mult)
+                self.fabs, self.fx, self.fy, self.Dsubap, self.noise, self.modal, self.modal_mult, 
+                self.Zmax, self.Tx)
         else:
             self.noise_powerspec = 0.
 
@@ -180,14 +188,15 @@ class FFS():
                 self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
                     self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap, 
                     self.cn2, self.wind_vector, self.texp, self.wvl, 10, 10,
-                    self.L0, self.l0, self.modal, self.modal_mult)
+                    self.L0, self.l0, self.modal, self.modal_mult, self.Zmax, self.Tx)
             else:
                 self.alias_subharm = 0.
 
             if self.noise > 0:
                 self.noise_subharm = ao_power_spectra.Jol_noise_openloop(
                     self.fabs_subharm, self.fx_subharm, self.fy_subharm, 
-                    self.Dsubap, self.noise, self.modal, self.modal_mult)
+                    self.Dsubap, self.noise, self.modal, self.modal_mult, 
+                    self.Zmax, self.Tx)
             else:
                 self.noise_subharm = 0.
 
