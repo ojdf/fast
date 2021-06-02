@@ -50,6 +50,7 @@ p = {
 'NOISE': 1.,                                # WFS noise [rad^2]
 'MODAL': False,                             # Modal (True) or Zonal (False) correction
 'MODAL_MULT': 1,                            # Multiplier to reduce number of modes if required
-'ZMAX': None
+'ZMAX': None,
+'GTILT': False                             # Use G tilt or Z tilt for Tip/Tilt calcs
 
 }

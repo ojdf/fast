@@ -7,11 +7,11 @@ from aotools import cn2_to_r0
 def zernike_ft(fabs, phi, D, n_noll):
     n, m = zernIndex(n_noll)
     if m == 0:
-        return numpy.sqrt(n+1) * (-1)**(n/2.) * (2 * jve(n+1, fabs * D / 2) / (fabs * D/2))
+        return numpy.sqrt(n+1) * (-1)**(n/2.) * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2))
     elif n_noll % 2 == 0:
-        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jve(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.cos(m * phi)
+        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.cos(m * phi)
     else:
-        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jve(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.sin(m * phi)
+        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.sin(m * phi)
     
 def zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None):
     phi = numpy.arctan2(fy,fx)
@@ -86,6 +86,13 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
             out[:,mid,mid] = 0
         return out
 
+def piston_gtilt_filter(fabs, fx, fy, D):
+    pist = zernike_squared_filter(fabs, fx, fy, D, 1)
+    G_tt = jv(1, fabs * D/2.)**2
+    filt = (pist + G_tt).real
+    filt[filt>1] = 1.
+    return filt
+
 def piston_filter(fabs, D):
     filt = 1 - (2*j1(0.5 * D * fabs) / (0.5 * D * fabs))**2
     filt[int(fabs.shape[0]/2), int(fabs.shape[1]/2)] = 0
@@ -101,7 +108,7 @@ def piston_tiptilt_filter(fabs, D):
     filt[int(fabs.shape[0]/2), int(fabs.shape[1]/2)] = 0
     return filt
 
-def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None):
+def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
     fmax = numpy.pi/d_WFS
     wfs_space = numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
     if modal:
@@ -109,25 +116,27 @@ def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None):
         if Zmax is None:
             dm_space = fabs <= fmax * modal_mult
         else:
-            dm_space = zernike_squared_filter(fabs, fx, fy, D, Zmax).real
+            if Gtilt:
+                dm_space = piston_gtilt_filter(fabs, fx, fy, D)
+            else:
+                dm_space = zernike_squared_filter(fabs, fx, fy, D, Zmax).real
     else:
         dm_space = wfs_space
 
     mask = wfs_space * dm_space
     return mask
 
-def mask_hf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None):
-    return 1 - mask_lf(fx, fy, d_WFS, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D)
+def mask_hf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
+    return 1 - mask_lf(fx, fy, d_WFS, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D, Gtilt=Gtilt)
 
-def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, modal=False, modal_mult=1, Zmax=None, D=None):
+def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, lf_mask):
     N = noise_variance #* (Dsubap/(2*numpy.pi))**2
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
     midpt = int(powerspec.shape[-1]/2.)
     powerspec[midpt, midpt] = 0.
-    mask = mask_lf(fx, fy, Dsubap, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D)
-    return mask * powerspec
+    return lf_mask * powerspec
 
-def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6, modal=False, modal_mult=1, Zmax=None, D=None):
+def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
     alias = numpy.zeros((len(p), *fabs.shape))
@@ -162,24 +171,17 @@ def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, v=None, Delta_t=None, wvl=None, 
                 mult[...,midpt,midpt] = term_2[...,midpt,midpt]
             alias += mult
 
-    alias *= sinc_term 
-
-    alias *= mask_lf(fx,fy,Dsubap,modal=modal,modal_mult=modal_mult,Zmax=Zmax,D=D)
+    alias *= sinc_term * lf_mask
 
     return alias
 
-def G_AO_Jol(fabs, fx, fy, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
+def G_AO_Jol(fabs, fx, fy, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
             wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1):
     if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA']:
         raise Exception('Mode not recognised')
 
     if mode is 'NOAO':
         return 1 
-
-    if Dsubap is not None:
-        mask = mask_lf(fx, fy, Dsubap, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=Tx)
-    else:
-        mask = 1 
 
     if mode is 'AO':
         return 1-mask
