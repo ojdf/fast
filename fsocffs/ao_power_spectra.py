@@ -132,18 +132,25 @@ def mask_hf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=F
 def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, lf_mask):
     N = noise_variance #* (Dsubap/(2*numpy.pi))**2
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
-    midpt = int(powerspec.shape[-1]/2.)
-    powerspec[midpt, midpt] = 0.
+    midpt_x = int(powerspec.shape[-2]/2.)
+    midpt_y = int(powerspec.shape[-1]/2.)
+    powerspec[...,midpt_x, midpt_y] = 0.
     return lf_mask * powerspec
 
 def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
-    alias = numpy.zeros((len(p), *fabs.shape))
-    midpt = int(fx.shape[-1]/2.)
+    midpt_x = int(fx.shape[-2]/2.)
+    midpt_y = int(fy.shape[-1]/2.)
 
-    fx_tile = numpy.tile(fx, (len(p),*[1]*fx.ndim))
-    fy_tile = numpy.tile(fy, (len(p),*[1]*fx.ndim))
+    if fx.ndim == 3 and fx.shape[0] == len(p):
+        fx_tile = fx
+        fy_tile = fy
+        alias = numpy.zeros(fabs.shape)
+    else:
+        fx_tile = numpy.tile(fx, (len(p),*[1]*fx.ndim))
+        fy_tile = numpy.tile(fy, (len(p),*[1]*fy.ndim))
+        alias = numpy.zeros((len(p), *fabs.shape))
 
     if v is not None:
         v_dot_kappa = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
@@ -163,12 +170,12 @@ def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, lf_mask, v=None, Delta_t=None, w
             term_1 = (fx/(fy_shift) + fy/(fx_shift))**2
             term_2 = funcs.turb_powerspectrum_vonKarman(fabs_shift, p, L0=L0, l0=l0)
             mult = term_1 * term_2 *  fx**2 * fy**2 / fabs**4
-            mult[...,midpt,midpt] = 0.
+            mult[...,midpt_x,midpt_y] = 0.
             if l == 0:
-                mult[...,midpt,:] = term_2[...,midpt,:]
+                mult[...,midpt_x,:] = term_2[...,midpt_x,:]
             if k == 0:
-                mult[...,midpt] = term_2[...,midpt]
-                mult[...,midpt,midpt] = term_2[...,midpt,midpt]
+                mult[...,midpt_y] = term_2[...,midpt_y]
+                mult[...,midpt_x,midpt_y] = term_2[...,midpt_x,midpt_y]
             alias += mult
 
     alias *= sinc_term * lf_mask
@@ -186,8 +193,12 @@ def G_AO_Jol(fabs, fx, fy, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=No
     if mode is 'AO':
         return 1-mask
 
-    fx_tile = numpy.tile(fx, (len(h),*[1]*fx.ndim))
-    fy_tile = numpy.tile(fy, (len(h),*[1]*fx.ndim))
+    if fx.ndim == 3 and fx.shape[0] == len(h):
+        fx_tile = fx
+        fy_tile = fy
+    else:
+        fx_tile = numpy.tile(fx, (len(h),*[1]*fx.ndim))
+        fy_tile = numpy.tile(fy, (len(h),*[1]*fx.ndim))
 
     delta_r_theta = (numpy.tile(dtheta, (len(h),1)).T / 206265. * h ).T
 

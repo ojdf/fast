@@ -19,6 +19,8 @@ class FFS():
         self.Niter = params['NITER']
         self.Nchunks = params['NCHUNKS']
         self.fftw = params['FFTW']
+        self.temporal = params['TEMPORAL']
+        self.dt = params['DT']
 
         if self.Niter % self.Nchunks != 0:
             raise Exception('NCHUNKS must divite NITER without remainder')
@@ -71,6 +73,32 @@ class FFS():
                 self.fabs_subharm[i] = fabs_lo
         else:
             self.fx_subharm = self.fy_subharm = self.fabs_subharm = None
+
+        if self.temporal:
+            self.fx_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter))
+            self.fy_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter))
+            
+            for i in range(len(self.h)):
+                dx = self.wind_speed[i] * self.dt
+                df_temporal = 2 * numpy.pi / (self.Niter * dx)
+
+                # define x axis according to temporal requirements, and y axis 
+                # same as the normal y axis (above), since we will integrate over this one
+                fx_axis = numpy.arange(-self.Niter/2, self.Niter/2) * df_temporal
+                fy_axis = numpy.arange(-self.Npxls/2, self.Npxls/2) * self.df
+                fx, fy = numpy.meshgrid(fx_axis, fy_axis)
+
+                # rotate the fx and fy so wind along x axis
+                theta = numpy.radians(self.wind_dir[i])
+                fx_rot = fx * numpy.cos(theta) - fy * numpy.sin(theta)
+                fy_rot = fx * numpy.sin(theta) + fy * numpy.cos(theta)
+
+                self.fx_temporal[i] = fx_rot
+                self.fy_temporal[i] = fy_rot
+
+            self.fabs_temporal = numpy.sqrt(self.fx_temporal**2 + self.fy_temporal**2)
+        else:
+            self.fx_temporal = self.fy_temporal = self.fabs_temporal = None
 
     def init_atmos(self, params):
         self.zenith_correction = self.calc_zenith_correction(params['ZENITH_ANGLE'])
@@ -133,6 +161,11 @@ class FFS():
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
                     D=self.Tx, Gtilt=self.Gtilt)
 
+        if self.temporal:
+            self.lf_mask_temporal = ao_power_spectra.mask_lf(self.fx_temporal, self.fy_temporal,
+                    self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
+                    D=self.Tx, Gtilt=self.Gtilt)
+
     def init_pupil_mask(self, params):
         if params['PROP_DIR'] is 'up':
             # Gaussian aperture
@@ -180,9 +213,9 @@ class FFS():
         else:
             self.noise_powerspec = 0.
 
-        self.powerspec = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-            self.turb_powerspec * self.G_ao + self.alias_powerspec, self.h, 
-            layer=self.params['LAYER']) + self.noise_powerspec
+        self.powerspec = 2 * numpy.pi * self.k**2 * \
+            (self.turb_powerspec * self.G_ao + self.alias_powerspec) + \
+            self.noise_powerspec / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
@@ -208,22 +241,56 @@ class FFS():
             else:
                 self.noise_subharm = 0.
 
-            self.powerspec_subharm = 2 * numpy.pi * self.k**2 * funcs.integrate_path(
-                self.turb_lo * self.G_ao_lo + self.alias_subharm, self.h, layer=self.params['LAYER']) \
-                + self.noise_subharm
+            self.powerspec_subharm = 2 * numpy.pi * self.k**2 * \
+                (self.turb_lo * self.G_ao_lo + self.alias_subharm) + \
+                self.noise_subharm / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
         else:
             self.powerspec_subharm = None
 
+        if self.temporal:
+            self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
+                self.fabs_temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
+
+            self.G_ao_temporal = ao_power_spectra.G_AO_Jol(
+                self.fabs_temporal, self.fx_temporal, self.fy_temporal, self.lf_mask_temporal, 
+                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
+                self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
+
+            if self.alias:
+                self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
+                    self.fabs_temporal, self.fx_temporal, self.fy_temporal, self.Dsubap, 
+                    self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
+                    self.L0, self.l0)
+            else:
+                self.alias_temporal = 0.
+
+            if self.noise > 0:
+                self.noise_temporal = ao_power_spectra.Jol_noise_openloop(
+                    self.fabs_temporal, self.fx_temporal, self.fy_temporal, 
+                    self.Dsubap, self.noise, self.lf_mask_temporal)
+            else:
+                self.noise_temporal = 0.
+
+            self.temporal_powerspec = 2 * numpy.pi * self.k**2 * \
+                (self.turb_temporal * self.G_ao_temporal + self.alias_temporal) + \
+                self.noise_temporal / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
+
+            self.temporal_powerspec_integrated = self.temporal_powerspec.sum(1) * self.df
+
+        else:
+            self.temporal_powerspec = None
+
     def compute_scrns(self):
-        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape))
+
+        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape[1:]))
 
         chunk_iters = int(self.Niter/self.Nchunks)
 
         for i in tqdm(range(self.Nchunks)):
             self.phs[i*chunk_iters:(i+1)*chunk_iters] = funcs.make_phase_fft(
-                chunk_iters, self.powerspec, self.df, self.subharmonics,
-                self.powerspec_subharm, self.fx_subharm, self.fy_subharm, 
-                self.fabs_subharm, self.dx, self.fftw)
+                chunk_iters, self.powerspec, self.df, self.h, self.params['LAYER'], self.subharmonics, self.powerspec_subharm, 
+                self.fx_subharm, self.fy_subharm, self.fabs_subharm, self.dx, self.fftw,
+                self.temporal, self.temporal_powerspec)
 
         return self.phs
 
