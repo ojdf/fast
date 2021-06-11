@@ -221,7 +221,7 @@ def make_phase_fft(Nscrns, powerspec, df, h, layer=True, sh=False, powerspecs_lo
         fftw_in = pyfftw.empty_aligned(rand.shape, dtype='complex128')
         fftw_out = pyfftw.empty_aligned(rand.shape, dtype='complex128')
         fftw_obj = pyfftw.FFTW(fftw_in, fftw_out, axes=((-1,-2)))
-        fftw_in[:] = numpy.fft.fftshift(numpy.sqrt(powerspec) * rand * df, axes=(-1,-2))
+        fftw_in[:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
         phasescrn = numpy.fft.fftshift(fftw_obj(), axes=(-1,-2)).real
 
     else:
@@ -343,8 +343,8 @@ def generate_random_coefficients(Nscrns, powerspec, h, layer=True, temporal=Fals
 
         powerspec_integrated = integrate_path(powerspec, h, layer=layer)
 
-        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) \
-         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
+        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec_integrated.shape)) \
+         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec_integrated.shape))
 
         return rand * numpy.sqrt(powerspec_integrated)
 
@@ -356,12 +356,9 @@ def generate_random_coefficients(Nscrns, powerspec, h, layer=True, temporal=Fals
 
             r_fourier *= numpy.sqrt(temporal_powerspecs[i]/temporal_powerspecs[i].sum())
 
-            r = fouriertransform.ift(r_fourier,1)
+            r = fouriertransform.ft(r_fourier,1)
 
-            print(r.real.var())
-            print(r.imag.var())
-
-            rand += (r.T * powerspec[i])
+            rand += (r.T * numpy.sqrt(powerspec[i]))
         return rand
 
 
@@ -379,6 +376,6 @@ def temporal_powerspec(N, dt, v, cn2, L0=numpy.inf, l0=1e-6):
     # integrate along orthogonal wind (y) axis
     powerspec_temporal = simps(powerspec, dx=df, axis=1)
 
-    powerspec_temporal /= simps(powerspec_temporal, dx=df, axis=1)
+    # powerspec_temporal /= simps(powerspec_temporal, dx=df, axis=1)
 
     return powerspec_temporal
