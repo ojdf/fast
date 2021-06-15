@@ -24,6 +24,8 @@ class FFS():
 
         if self.Niter % self.Nchunks != 0:
             raise Exception('NCHUNKS must divite NITER without remainder')
+        else:
+            self.Niter_per_chunk = self.Niter // self.Nchunks
 
         self.init_atmos(self.params)
         self.init_frequency_grid(self.params)
@@ -75,16 +77,16 @@ class FFS():
             self.fx_subharm = self.fy_subharm = self.fabs_subharm = None
 
         if self.temporal:
-            self.fx_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter))
-            self.fy_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter))
+            self.fx_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter_per_chunk))
+            self.fy_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter_per_chunk))
             
             for i in range(len(self.h)):
                 dx = self.wind_speed[i] * self.dt
-                df_temporal = 2 * numpy.pi / (self.Niter * dx)
+                df_temporal = 2 * numpy.pi / (self.Niter_per_chunk * dx)
 
                 # define x axis according to temporal requirements, and y axis 
                 # same as the normal y axis (above), since we will integrate over this one
-                fx_axis = numpy.arange(-self.Niter/2, self.Niter/2) * df_temporal
+                fx_axis = numpy.arange(-self.Niter_per_chunk/2, self.Niter_per_chunk/2) * df_temporal
                 fy_axis = numpy.arange(-self.Npxls/2, self.Npxls/2) * self.df
                 fx, fy = numpy.meshgrid(fx_axis, fy_axis)
 
@@ -214,8 +216,8 @@ class FFS():
             self.noise_powerspec = 0.
 
         self.powerspec = 2 * numpy.pi * self.k**2 * \
-            (self.turb_powerspec * self.G_ao + self.alias_powerspec) + \
-            self.noise_powerspec / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
+            funcs.integrate_path((self.turb_powerspec * self.G_ao + self.alias_powerspec), h=self.h, layer=self.params['LAYER']) \
+            + self.noise_powerspec
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
@@ -242,8 +244,8 @@ class FFS():
                 self.noise_subharm = 0.
 
             self.powerspec_subharm = 2 * numpy.pi * self.k**2 * \
-                (self.turb_lo * self.G_ao_lo + self.alias_subharm) + \
-                self.noise_subharm / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
+                funcs.integrate_path(self.turb_lo * self.G_ao_lo + self.alias_subharm, h=self.h, layer=self.params['LAYER']) \
+                + self.noise_subharm 
         else:
             self.powerspec_subharm = None
 
@@ -271,24 +273,23 @@ class FFS():
             else:
                 self.noise_temporal = 0.
 
-            self.temporal_powerspec = 2 * numpy.pi * self.k**2 * \
-                (self.turb_temporal * self.G_ao_temporal + self.alias_temporal) + \
-                self.noise_temporal / funcs.integrate_path(numpy.ones(len(self.h)), h=self.h, layer=self.params['LAYER'])
+            temporal_powerspec_beforeintegration = 2 * numpy.pi * self.k**2 * \
+                funcs.integrate_path(self.turb_temporal * self.G_ao_temporal + self.alias_temporal, h=self.h, layer=self.params['LAYER']) \
+                + self.noise_temporal
 
-            self.temporal_powerspec_integrated = self.temporal_powerspec.sum(1) * self.df
+            # integrate along y axis
+            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.df
 
         else:
             self.temporal_powerspec = None
 
     def compute_scrns(self):
 
-        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape[1:]))
-
-        chunk_iters = int(self.Niter/self.Nchunks)
+        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape))
 
         for i in tqdm(range(self.Nchunks)):
-            self.phs[i*chunk_iters:(i+1)*chunk_iters] = funcs.make_phase_fft(
-                chunk_iters, self.powerspec, self.df, self.h, self.params['LAYER'], self.subharmonics, self.powerspec_subharm, 
+            self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
+                self.Niter_per_chunk, self.powerspec, self.df, self.subharmonics, self.powerspec_subharm, 
                 self.fx_subharm, self.fy_subharm, self.fabs_subharm, self.dx, self.fftw,
                 self.temporal, self.temporal_powerspec)
 

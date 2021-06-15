@@ -211,10 +211,10 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
 
     return integral
 
-def make_phase_fft(Nscrns, powerspec, df, h, layer=True, sh=False, powerspecs_lo=None, fxs_lo=None,
+def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=None,
                     fys_lo=None, fabss_lo=None, dx=None, fftw=False, temporal=False, temporal_powerspec=None):
 
-    rand = generate_random_coefficients(Nscrns, powerspec, h, layer=layer, 
+    rand = generate_random_coefficients(Nscrns, powerspec, 
                 temporal=temporal, temporal_powerspecs=temporal_powerspec)
 
     if fftw:
@@ -252,7 +252,7 @@ def make_phase_fft(Nscrns, powerspec, df, h, layer=True, sh=False, powerspecs_lo
 
             powerspec_lo[1,1] = 0
 
-            rand_lo = generate_random_coefficients(Nscrns, powerspec_lo, h, layer=layer,
+            rand_lo = generate_random_coefficients(Nscrns, powerspec_lo,
                         temporal=temporal, temporal_powerspecs=temporal_powerspec) \
                             * df_lo
 
@@ -337,29 +337,25 @@ def coupling_loss(W, N, pupil, dx):
     coupling = numpy.abs((fibre_field * pupil).sum() * dx**2)**2
     return 1 - coupling
 
-def generate_random_coefficients(Nscrns, powerspec, h, layer=True, temporal=False, temporal_powerspecs=None):
+def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None):
 
     if not temporal:
 
-        powerspec_integrated = integrate_path(powerspec, h, layer=layer)
+        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) \
+         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
 
-        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec_integrated.shape)) \
-         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec_integrated.shape))
-
-        return rand * numpy.sqrt(powerspec_integrated)
+        return rand * numpy.sqrt(powerspec)
 
     else:
-        rand = numpy.zeros((Nscrns, *powerspec.shape[1:]), dtype=complex)
-        for i in range(len(h)):            
-            r_fourier = numpy.random.normal(0,1,size=(*powerspec[i].shape, Nscrns)) \
-                + 1j * numpy.random.normal(0,1,size=(*powerspec[i].shape, Nscrns))
 
-            r_fourier *= numpy.sqrt(temporal_powerspecs[i]/temporal_powerspecs[i].sum())
+        r_fourier = numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns)) \
+            + 1j * numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns))
 
-            r = fouriertransform.ft(r_fourier,1)
+        r_fourier *= numpy.sqrt(temporal_powerspecs/temporal_powerspecs.sum())
 
-            rand += (r.T * numpy.sqrt(powerspec[i]))
-        return rand
+        r = fouriertransform.ft(r_fourier,1)
+
+        return r.T * numpy.sqrt(powerspec)
 
 
 

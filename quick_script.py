@@ -1,18 +1,23 @@
 import fsocffs
 from demo_params import p
 
-p['NITER'] = 100
+p['NITER'] = 10000
+p['NCHUNKS'] = 10
+p['DT'] = 0.0003
 p['AO_MODE'] = 'NOAO'
 p['TEMPORAL'] = True
 p['ALIAS'] = False
 p['NOISE'] = 0
-p['L0'] = 25
-p['WIND_SPD'] = numpy.ones(7) * numpy.random.uniform(0,360,size=(7))
-p['NCHUNKS'] = 1
-p['SUBHARM'] = False
+p['L0'] = numpy.inf
+p['SUBHARM'] = True
+
+p['H_TURB'] = numpy.array([0])
+p['CN2_TURB'] = numpy.array([100e-15])
+p['WIND_SPD'] = numpy.array([10])
+p['WIND_DIR'] = numpy.array([0])
 
 sim = fsocffs.FFS(p)
 
-# r1 = fsocffs.funcs.generate_random_coefficients(sim.Niter, sim.powerspec, sim.h, True, sim.temporal, sim.temporal_powerspec_integrated)
-# r2 = fsocffs.funcs.generate_random_coefficients(sim.Niter, sim.powerspec, sim.h, True, False, sim.temporal_powerspec_integrated)
-sim.compute_scrns()
+# r1 = fsocffs.funcs.generate_random_coefficients(sim.Niter//sim.Nchunks, sim.powerspec, sim.temporal, sim.temporal_powerspec)
+# r2 = fsocffs.funcs.generate_random_coefficients(sim.Niter//sim.Nchunks, sim.powerspec, False, sim.temporal_powerspec)
+sim.run()
