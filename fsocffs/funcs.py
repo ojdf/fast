@@ -144,7 +144,7 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     try:
         nlayers = len(cn2)
         cn2 = numpy.array(cn2)
-        if fabs.ndim == 3 and fabs.shape[0] == nlayers:
+        if freq.freq_per_layer:
             # we have a 3d fabs array already, with an entry for each layer
             power_spec = ((0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)).T * cn2).T
         else:

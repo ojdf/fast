@@ -124,12 +124,12 @@ class FFS():
         self.hf_mask = 1 - self.lf_mask
 
         if self.subharmonics:
-            self.lf_mask_subharm = ao_power_spectra.mask_lf(self.freq.main,
+            self.lf_mask_subharm = ao_power_spectra.mask_lf(self.freq.subharm,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
                     D=self.Tx, Gtilt=self.Gtilt)
 
         if self.temporal:
-            self.lf_mask_temporal = ao_power_spectra.mask_lf(self.freq.main,
+            self.lf_mask_temporal = ao_power_spectra.mask_lf(self.freq.temporal,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
                     D=self.Tx, Gtilt=self.Gtilt)
 
@@ -243,7 +243,7 @@ class FFS():
                 + self.noise_temporal
 
             # integrate along y axis
-            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.df
+            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
 
         else:
             self.temporal_powerspec = None
@@ -322,15 +322,10 @@ class SpatialFrequencies():
 
     def __init__(self, N, dx):
 
-        self.main = SpatialFrequencyStruct()
-        self.subharm = SpatialFrequencyStruct()
-        self.temporal = SpatialFrequencyStruct()
-
         self.N = N
         self.dx = dx
 
-        self.main.fx, self.main.fy, self.main.fabs, self.main.f = funcs.f_grid_dx(N, dx)
-        self.main.df = self.main.f[1] - self.main.f[0]
+        self.make_main_freqs(self.N, self.dx)
 
         # make main spatial frequencies attributes of Frequencies object too
         self.fx = self.main.fx
@@ -339,25 +334,26 @@ class SpatialFrequencies():
         self.f = self.main.f
         self.df = self.main.df
 
+    def make_main_freqs(self, N, dx):
+        df = 2*numpy.pi/(N*dx)
+        fx_axis = numpy.arange(-N/2., N/2.) * df
+        self.main = SpatialFrequencyStruct(fx_axis)
+
     def make_subharm_freqs(self, pmax=3):
 
-        self.subharm.fx = numpy.zeros((pmax,3,3))
-        self.subharm.fy = numpy.zeros((pmax,3,3))
-        self.subharm.fabs = numpy.zeros((pmax,3,3))
+        fx_axes = []
         D = self.dx * self.N
         for i,p in enumerate(range(1,pmax+1)):
             df_lo = 2*numpy.pi/(3**p * D)
             fx_lo = numpy.arange(-1,2) * df_lo
-            fx_lo, fy_lo = numpy.meshgrid(fx_lo, fx_lo)
-            fabs_lo = numpy.sqrt(fx_lo**2 + fy_lo**2)
-            self.subharm.fx[i] = fx_lo
-            self.subharm.fy[i] = fy_lo
-            self.subharm.fabs[i] = fabs_lo
+            fx_axes.append(fx_lo)
+
+        self.subharm = SpatialFrequencyStruct(numpy.array(fx_axes))
 
     def make_temporal_freqs(self, nlayer, Ny, Nx, wind_speed, wind_dir, dt):
 
-        self.temporal.fx = numpy.zeros((nlayer, Ny, Nx))
-        self.temporal.fy = numpy.zeros((nlayer, Ny, Nx))
+        fx_axes = []
+        fy_axes = numpy.tile(self.main.f, (nlayer,1))
         
         for i in range(nlayer):
             dx = wind_speed[i] * dt
@@ -366,23 +362,58 @@ class SpatialFrequencies():
             # define x axis according to temporal requirements, and y axis 
             # same as the main y axis, since we will integrate over this one
             fx_axis = numpy.arange(-Nx/2, Nx/2) * df_temporal
-            fy_axis = self.main.f
-            fx, fy = numpy.meshgrid(fx_axis, fy_axis)
+            fx_axes.append(fx_axis)
 
-            # rotate the fx and fy so wind along x axis
-            theta = numpy.radians(wind_dir[i])
-            fx_rot = fx * numpy.cos(theta) - fy * numpy.sin(theta)
-            fy_rot = fx * numpy.sin(theta) + fy * numpy.cos(theta)
-
-            self.temporal.fx[i] = fx_rot
-            self.temporal.fy[i] = fy_rot
-
-        self.temporal.fabs = numpy.sqrt(self.temporal.fx**2 + self.temporal.fy**2)
+        print(numpy.array(fx_axes).shape)
+        print(fy_axes.shape)
+        self.temporal = SpatialFrequencyStruct(numpy.array(fx_axes), fy_axes, rot=numpy.radians(wind_dir), freq_per_layer=True)
 
 class SpatialFrequencyStruct():
 
-    fx = None
-    fy = None
-    fabs = None
-    f = None
-    df = None
+    def __init__(self, fx_axis, fy_axis=None, rot=None, freq_per_layer=False):
+        
+        self.fx_axis = fx_axis
+        self.freq_per_layer = freq_per_layer
+        if fy_axis is None:
+            # x and y axes the same
+            self.fy_axis = fx_axis
+            self.f = fx_axis
+            self.df = fx_axis[...,1]-fx_axis[...,0]
+            self.dfx = self.df
+            self.dfy = self.df
+        else:
+            # x and y axes different
+            self.fy_axis = fy_axis
+            self.dfx = fx_axis[...,1]-fx_axis[...,0]
+            self.dfy = fy_axis[...,1]-fy_axis[...,0]
+
+        if self.fx_axis.ndim == 2:
+            self._n = self.fx_axis.shape[0]
+            self.fx = numpy.zeros((self._n, self.fy_axis.shape[1], self.fx_axis.shape[1]))
+            self.fy = numpy.zeros((self._n, self.fy_axis.shape[1], self.fx_axis.shape[1]))
+
+            for i in range(self._n):
+                self.fx[i], self.fy[i] = numpy.meshgrid(self.fx_axis[i], self.fy_axis[i])
+                if rot is not None:
+                    fx_rot = self.fx * numpy.cos(rot[i]) - self.fy * numpy.sin(rot[i])
+                    fy_rot = self.fx * numpy.sin(rot[i]) + self.fy * numpy.cos(rot[i])
+                    self.fx = fx_rot
+                    self.fy = fy_rot
+
+        elif self.fx_axis.ndim == 1:
+            self._n = 1
+            self.fx, self.fy = numpy.meshgrid(self.fx_axis, self.fy_axis)
+
+            if rot is not None:
+                fx_rot = self.fx * numpy.cos(rot) - self.fy * numpy.sin(rot)
+                fy_rot = self.fx * numpy.sin(rot) + self.fy * numpy.cos(rot)
+                self.fx = fx_rot
+                self.fy = fy_rot
+        else:
+            raise Exception('fx_axis ndim sould be either 1 or 2')
+
+        self.fabs = numpy.sqrt(self.fx**2 + self.fy**2)
+
+    def to_realspace():
+        pass
+        
