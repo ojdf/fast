@@ -108,7 +108,10 @@ def piston_tiptilt_filter(fabs, D):
     filt[int(fabs.shape[0]/2), int(fabs.shape[1]/2)] = 0
     return filt
 
-def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
+def mask_lf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
+    fx = freq.fx
+    fy = freq.fy
+
     fmax = numpy.pi/d_WFS
     wfs_space = numpy.logical_and(abs(fx) <= fmax, abs(fy) <= fmax)
     if modal:
@@ -126,10 +129,16 @@ def mask_lf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=F
     mask = wfs_space * dm_space
     return mask
 
-def mask_hf(fx, fy, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
+def mask_hf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
+    fx = freq.fx
+    fy = freq.fy
     return 1 - mask_lf(fx, fy, d_WFS, modal=modal, modal_mult=modal_mult, Zmax=Zmax, D=D, Gtilt=Gtilt)
 
-def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, lf_mask):
+def Jol_noise_openloop(freq, Dsubap, noise_variance, lf_mask):
+    fabs = freq.fabs
+    fx = freq.fx
+    fy = freq.fy
+    
     N = noise_variance #* (Dsubap/(2*numpy.pi))**2
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
     midpt_x = int(powerspec.shape[-2]/2.)
@@ -137,7 +146,11 @@ def Jol_noise_openloop(fabs, fx, fy, Dsubap, noise_variance, lf_mask):
     powerspec[...,midpt_x, midpt_y] = 0.
     return lf_mask * powerspec
 
-def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
+def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
+    fabs = freq.fabs
+    fx = freq.fx
+    fy = freq.fy
+
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
     midpt_x = int(fx.shape[-2]/2.)
@@ -182,8 +195,13 @@ def Jol_alias_openloop(fabs, fx, fy, Dsubap, p, lf_mask, v=None, Delta_t=None, w
 
     return alias
 
-def G_AO_Jol(fabs, fx, fy, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
+def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
             wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1):
+
+    fabs = freq.fabs
+    fx = freq.fx
+    fy = freq.fy
+
     if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA']:
         raise Exception('Mode not recognised')
 
@@ -225,6 +243,19 @@ def G_AO_Jol(fabs, fx, fy, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=No
         return mask * (Z * aniso + (1-Z) * aniso_lgs) + (1-mask)
 
     raise Exception("Shouldn't be here")
+
+def logamp_powerspec(freq, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
+
+    fabs = freq.fabs
+    
+    if fabs.ndim == 3 and fabs.shape[0] == len(p):
+        fabs_3d = fabs
+    else:
+        fabs_3d = numpy.tile(fabs, (len(h),*[1]*fabs.ndim))
+
+    powerspec = funcs.turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
+
+    powerspec *= numpy.sin(wvl * h * fabs_3d.T**2 / (4 * numpy.pi)).T**2
 
 def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
     if mode is 'perfect':

@@ -125,12 +125,12 @@ def integrate_path(integrands, h, layer=False, axis=0):
     else:
         return simps(integrands, x=h, axis=axis)
 
-def turb_powerspectrum_vonKarman(fabs, cn2, L0=25, l0=0.01, C=2*numpy.pi):
+def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     '''
     Von Karman turbulence power spectrum of refractive index.
 
     Parameters
-        fabs (numpy.ndarray): |f| absolute value of spatial frequency
+        freq (SpatialFrequencyStruct): spatial frequency object from sim
         cn2[dh] (float / numpy.ndarray): Refractive index structure constant,
             can be a 1d array for multiple layers. If discrete layers are used 
             then this may be considered the cn2dh value, too.
@@ -138,6 +138,7 @@ def turb_powerspectrum_vonKarman(fabs, cn2, L0=25, l0=0.01, C=2*numpy.pi):
         l0 (float): Inner scale
         C (float): Multiplier for outer scale, i.e. k0=C/L0. Usually either 1 or 2pi
     '''
+    fabs = freq.fabs
     km = 5.92 / l0
     k0 = C / L0
     try:
@@ -211,8 +212,10 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
 
     return integral
 
-def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=None,
-                    fys_lo=None, fabss_lo=None, dx=None, fftw=False, temporal=False, temporal_powerspec=None):
+def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
+                    fftw=False, temporal=False, temporal_powerspec=None):
+
+    df = freq.df
 
     rand = generate_random_coefficients(Nscrns, powerspec, 
                 temporal=temporal, temporal_powerspecs=temporal_powerspec)
@@ -244,9 +247,9 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
 
         for i,p in enumerate(range(1,4)):
             df_lo = 2*numpy.pi/(3**p * D)
-            fx_lo = fxs_lo[i]
-            fy_lo = fys_lo[i]
-            fabs_lo = fabss_lo[i]
+            fx_lo = freq.subharm.fx[i]
+            fy_lo = freq.subharm.fy[i]
+            fabs_lo = freq.subharm.fabs[i]
 
             powerspec_lo = powerspecs_lo[i]
 
@@ -279,12 +282,12 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
 
     return phs
     
-def logamp_var(pupil, dx, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
+def logamp_var(pupil, freq, dx, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
     N = pupil.shape[-1]
-    fx, fy, fabs, f = f_grid_dx(N, dx)
-    fabs_3d = numpy.array([fabs]*len(h))
 
-    powerspec = turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
+    fabs_3d = numpy.array([freq.fabs]*len(h))
+
+    powerspec = turb_powerspectrum_vonKarman(freq, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
 
     P =  numpy.abs(fouriertransform.ft2(pupil, dx))**2
     P /= (pupil.sum() * dx**2)**2
@@ -292,7 +295,7 @@ def logamp_var(pupil, dx, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
     integrand = (powerspec * numpy.sin(wvl * h * fabs_3d.T**2 / (4 * numpy.pi)).T**2).sum(0) \
         * P
 
-    return integrate_powerspectrum(integrand, f)
+    return integrate_powerspectrum(integrand, freq.f)
 
 def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
@@ -357,21 +360,12 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
 
         return r.T * numpy.sqrt(powerspec)
 
+def temporal_correlation(I):
+    # normalise
+    I -= I.mean()
+    I /= I.std()
 
+    corr = numpy.correlate(I,I, mode=full)
 
+    return corr[len(I):] / len(I)
 
-def temporal_powerspec(N, dt, v, cn2, L0=numpy.inf, l0=1e-6):
-    dx = v * dt
-    df = 2*numpy.pi / (N * v * dt)
-    f = numpy.arange(-N/2, N/2) * df
-    fx, fy = numpy.meshgrid(f,f)
-    fabs = numpy.sqrt(fx**2 + fy**2)
-    
-    powerspec = turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0)
-
-    # integrate along orthogonal wind (y) axis
-    powerspec_temporal = simps(powerspec, dx=df, axis=1)
-
-    # powerspec_temporal /= simps(powerspec_temporal, dx=df, axis=1)
-
-    return powerspec_temporal

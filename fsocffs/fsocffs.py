@@ -56,51 +56,16 @@ class FFS():
         else:
             self.Npxls = params['NPXLS']
 
-        self.fx, self.fy, self.fabs, self.f = funcs.f_grid_dx(self.Npxls, self.dx)
-        self.df = self.f[1] - self.f[0]
+        self.freq = SpatialFrequencies(self.Npxls, self.dx)
 
         self.subharmonics = params['SUBHARM']
+
         if self.subharmonics:
-            self.fx_subharm = numpy.zeros((3,3,3))
-            self.fy_subharm = numpy.zeros((3,3,3))
-            self.fabs_subharm = numpy.zeros((3,3,3))
-            D = self.dx * self.Npxls
-            for i,p in enumerate(range(1,4)):
-                df_lo = 2*numpy.pi/(3**p * D)
-                fx_lo = numpy.arange(-1,2) * df_lo
-                fx_lo, fy_lo = numpy.meshgrid(fx_lo, fx_lo)
-                fabs_lo = numpy.sqrt(fx_lo**2 + fy_lo**2)
-                self.fx_subharm[i] = fx_lo
-                self.fy_subharm[i] = fy_lo
-                self.fabs_subharm[i] = fabs_lo
-        else:
-            self.fx_subharm = self.fy_subharm = self.fabs_subharm = None
+            self.freq.make_subharm_freqs()
 
         if self.temporal:
-            self.fx_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter_per_chunk))
-            self.fy_temporal = numpy.zeros((len(self.h), self.Npxls, self.Niter_per_chunk))
-            
-            for i in range(len(self.h)):
-                dx = self.wind_speed[i] * self.dt
-                df_temporal = 2 * numpy.pi / (self.Niter_per_chunk * dx)
-
-                # define x axis according to temporal requirements, and y axis 
-                # same as the normal y axis (above), since we will integrate over this one
-                fx_axis = numpy.arange(-self.Niter_per_chunk/2, self.Niter_per_chunk/2) * df_temporal
-                fy_axis = numpy.arange(-self.Npxls/2, self.Npxls/2) * self.df
-                fx, fy = numpy.meshgrid(fx_axis, fy_axis)
-
-                # rotate the fx and fy so wind along x axis
-                theta = numpy.radians(self.wind_dir[i])
-                fx_rot = fx * numpy.cos(theta) - fy * numpy.sin(theta)
-                fy_rot = fx * numpy.sin(theta) + fy * numpy.cos(theta)
-
-                self.fx_temporal[i] = fx_rot
-                self.fy_temporal[i] = fy_rot
-
-            self.fabs_temporal = numpy.sqrt(self.fx_temporal**2 + self.fy_temporal**2)
-        else:
-            self.fx_temporal = self.fy_temporal = self.fabs_temporal = None
+            self.freq.make_temporal_freqs(len(self.h), self.Npxls, self.Niter_per_chunk,
+                self.wind_speed, self.wind_dir, self.dt)
 
     def init_atmos(self, params):
         self.zenith_correction = self.calc_zenith_correction(params['ZENITH_ANGLE'])
@@ -153,18 +118,18 @@ class FFS():
             self.modal = True
             self.modal_mult = 1
 
-        self.lf_mask = ao_power_spectra.mask_lf(self.fx, self.fy, self.Dsubap, 
+        self.lf_mask = ao_power_spectra.mask_lf(self.freq.main, self.Dsubap, 
                     modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax, 
                     D=self.Tx, Gtilt=self.Gtilt)
         self.hf_mask = 1 - self.lf_mask
 
         if self.subharmonics:
-            self.lf_mask_subharm = ao_power_spectra.mask_lf(self.fx_subharm, self.fy_subharm,
+            self.lf_mask_subharm = ao_power_spectra.mask_lf(self.freq.main,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
                     D=self.Tx, Gtilt=self.Gtilt)
 
         if self.temporal:
-            self.lf_mask_temporal = ao_power_spectra.mask_lf(self.fx_temporal, self.fy_temporal,
+            self.lf_mask_temporal = ao_power_spectra.mask_lf(self.freq.main,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
                     D=self.Tx, Gtilt=self.Gtilt)
 
@@ -195,23 +160,23 @@ class FFS():
 
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
-            self.fabs, self.cn2, self.L0, self.l0, C=self.params['C'])
+            self.freq.main, self.cn2, self.L0, self.l0, C=self.params['C'])
 
         self.G_ao = ao_power_spectra.G_AO_Jol(
-            self.fabs, self.fx, self.fy, self.lf_mask, self.ao_mode, self.h, 
+            self.freq.main, self.lf_mask, self.ao_mode, self.h, 
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
             self.tloop, self.texp)
 
         if self.alias:
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
-                self.fabs, self.fx, self.fy, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
+                self.freq.main, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
                 self.texp, self.wvl, 10, 10, self.L0, self.l0)
         else:
             self.alias_powerspec = 0.
 
         if self.noise > 0:
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
-                self.fabs, self.fx, self.fy, self.Dsubap, self.noise, self.lf_mask)
+                self.freq.main, self.Dsubap, self.noise, self.lf_mask)
         else:
             self.noise_powerspec = 0.
 
@@ -221,16 +186,16 @@ class FFS():
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
-                self.fabs_subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
+                self.freq.subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
 
             self.G_ao_lo = ao_power_spectra.G_AO_Jol(
-                self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.lf_mask_subharm, 
+                self.freq.subharm, self.lf_mask_subharm, 
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
             if self.alias:
                 self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
-                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, self.Dsubap, 
+                    self.freq.subharm, self.Dsubap, 
                     self.cn2, self.lf_mask_subharm, self.wind_vector, self.texp, self.wvl, 10, 10,
                     self.L0, self.l0)
             else:
@@ -238,7 +203,7 @@ class FFS():
 
             if self.noise > 0:
                 self.noise_subharm = ao_power_spectra.Jol_noise_openloop(
-                    self.fabs_subharm, self.fx_subharm, self.fy_subharm, 
+                    self.freq.subharm,
                     self.Dsubap, self.noise, self.lf_mask_subharm)
             else:
                 self.noise_subharm = 0.
@@ -251,16 +216,16 @@ class FFS():
 
         if self.temporal:
             self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
-                self.fabs_temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
+                self.freq.temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
 
             self.G_ao_temporal = ao_power_spectra.G_AO_Jol(
-                self.fabs_temporal, self.fx_temporal, self.fy_temporal, self.lf_mask_temporal, 
+                self.freq.temporal, self.lf_mask_temporal, 
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
             if self.alias:
                 self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
-                    self.fabs_temporal, self.fx_temporal, self.fy_temporal, self.Dsubap, 
+                    self.freq.temporal, self.Dsubap, 
                     self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
                     self.L0, self.l0)
             else:
@@ -268,7 +233,7 @@ class FFS():
 
             if self.noise > 0:
                 self.noise_temporal = ao_power_spectra.Jol_noise_openloop(
-                    self.fabs_temporal, self.fx_temporal, self.fy_temporal, 
+                    self.freq.temporal, 
                     self.Dsubap, self.noise, self.lf_mask_temporal)
             else:
                 self.noise_temporal = 0.
@@ -278,7 +243,7 @@ class FFS():
                 + self.noise_temporal
 
             # integrate along y axis
-            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.df
+            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.df
 
         else:
             self.temporal_powerspec = None
@@ -289,9 +254,8 @@ class FFS():
 
         for i in tqdm(range(self.Nchunks)):
             self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
-                self.Niter_per_chunk, self.powerspec, self.df, self.subharmonics, self.powerspec_subharm, 
-                self.fx_subharm, self.fy_subharm, self.fabs_subharm, self.dx, self.fftw,
-                self.temporal, self.temporal_powerspec)
+                self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
+                self.dx, self.fftw, self.temporal, self.temporal_powerspec)
 
         return self.phs
 
@@ -299,7 +263,7 @@ class FFS():
         if pupil is None:
             pupil = self.pupil * self.fibre_efield
 
-        logamp_var = funcs.logamp_var(pupil, self.dx, self.h, self.cn2, self.wvl,
+        logamp_var = funcs.logamp_var(pupil, self.freq.main, self.dx, self.h, self.cn2, self.wvl,
             self.L0, self.l0)
         self.rand_logamp = numpy.random.normal(
             loc=0, scale=numpy.sqrt(logamp_var), size=(self.Niter,))
@@ -353,3 +317,72 @@ class FFS():
     def save(self, fname, **kwargs):
         hdr = self.make_header(self.params) 
         fits.writeto(fname, self.I, header=hdr, **kwargs)
+
+class SpatialFrequencies():
+
+    def __init__(self, N, dx):
+
+        self.main = SpatialFrequencyStruct()
+        self.subharm = SpatialFrequencyStruct()
+        self.temporal = SpatialFrequencyStruct()
+
+        self.N = N
+        self.dx = dx
+
+        self.main.fx, self.main.fy, self.main.fabs, self.main.f = funcs.f_grid_dx(N, dx)
+        self.main.df = self.main.f[1] - self.main.f[0]
+
+        # make main spatial frequencies attributes of Frequencies object too
+        self.fx = self.main.fx
+        self.fy = self.main.fy
+        self.fabs = self.main.fabs
+        self.f = self.main.f
+        self.df = self.main.df
+
+    def make_subharm_freqs(self, pmax=3):
+
+        self.subharm.fx = numpy.zeros((pmax,3,3))
+        self.subharm.fy = numpy.zeros((pmax,3,3))
+        self.subharm.fabs = numpy.zeros((pmax,3,3))
+        D = self.dx * self.N
+        for i,p in enumerate(range(1,pmax+1)):
+            df_lo = 2*numpy.pi/(3**p * D)
+            fx_lo = numpy.arange(-1,2) * df_lo
+            fx_lo, fy_lo = numpy.meshgrid(fx_lo, fx_lo)
+            fabs_lo = numpy.sqrt(fx_lo**2 + fy_lo**2)
+            self.subharm.fx[i] = fx_lo
+            self.subharm.fy[i] = fy_lo
+            self.subharm.fabs[i] = fabs_lo
+
+    def make_temporal_freqs(self, nlayer, Ny, Nx, wind_speed, wind_dir, dt):
+
+        self.temporal.fx = numpy.zeros((nlayer, Ny, Nx))
+        self.temporal.fy = numpy.zeros((nlayer, Ny, Nx))
+        
+        for i in range(nlayer):
+            dx = wind_speed[i] * dt
+            df_temporal = 2 * numpy.pi / (Nx * dx)
+
+            # define x axis according to temporal requirements, and y axis 
+            # same as the main y axis, since we will integrate over this one
+            fx_axis = numpy.arange(-Nx/2, Nx/2) * df_temporal
+            fy_axis = self.main.f
+            fx, fy = numpy.meshgrid(fx_axis, fy_axis)
+
+            # rotate the fx and fy so wind along x axis
+            theta = numpy.radians(wind_dir[i])
+            fx_rot = fx * numpy.cos(theta) - fy * numpy.sin(theta)
+            fy_rot = fx * numpy.sin(theta) + fy * numpy.cos(theta)
+
+            self.temporal.fx[i] = fx_rot
+            self.temporal.fy[i] = fy_rot
+
+        self.temporal.fabs = numpy.sqrt(self.temporal.fx**2 + self.temporal.fy**2)
+
+class SpatialFrequencyStruct():
+
+    fx = None
+    fy = None
+    fabs = None
+    f = None
+    df = None
