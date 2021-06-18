@@ -144,9 +144,25 @@ class FFS():
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
                 params['W0'], params['Tx_obsc'], ptype=ptype)
         else:
+            ptype = 'circ'
             # Circular (fully illuminated) aperture
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
-                Tx_obsc=params['Tx_obsc'], ptype='circ')
+                Tx_obsc=params['Tx_obsc'], ptype=ptype)
+
+        self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
+
+        if self.temporal:
+            # compute high-res pupil filter spline for later integration
+            fx_max = self.freq.temporal.fx_axis.max()
+            fy_max = self.freq.temporal.fy_axis.max()
+            f_max = max(fx_max, fy_max)
+            dx_req = numpy.pi / f_max
+            N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
+    
+            pupil_temporal = funcs.compute_pupil(N_req, dx_req, params['Tx'],
+                params['W0'], Tx_obsc=params['Tx_obsc'], ptype=ptype)
+            self.freq.make_logamp_freqs(N=N_req, dx=dx_req)
+            self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal, spline=True)
 
         if params['SMF']:
             # compute optimal SMF parameters
@@ -183,6 +199,11 @@ class FFS():
         self.powerspec = 2 * numpy.pi * self.k**2 * \
             funcs.integrate_path((self.turb_powerspec * self.G_ao + self.alias_powerspec), h=self.h, layer=self.params['LAYER']) \
             + self.noise_powerspec
+
+        self.logamp_powerspec = ao_power_spectra.logamp_powerspec(self.freq.main, 
+            self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter, layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
+
+        self.logamp_var = funcs.integrate_powerspectrum(self.logamp_powerspec, self.freq.main.f)
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
@@ -245,17 +266,28 @@ class FFS():
             # integrate along y axis
             self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
 
+            temporal_logamp_powerspec_beforeintegration = ao_power_spectra.logamp_powerspec(
+                self.freq.temporal, self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter_temporal, 
+                layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
+
+            self.temporal_logamp_powerspec = temporal_logamp_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
+
         else:
             self.temporal_powerspec = None
+            self.temporal_logamp_powerspec = None
 
     def compute_scrns(self):
 
         self.phs = numpy.zeros((self.Niter, *self.powerspec.shape))
+        self.logamp = numpy.zeros(self.Niter)
 
         for i in tqdm(range(self.Nchunks)):
             self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
                 self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
                 self.dx, self.fftw, self.temporal, self.temporal_powerspec)
+
+            self.logamp[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = \
+                funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec)
 
         return self.phs
 
@@ -263,16 +295,14 @@ class FFS():
         if pupil is None:
             pupil = self.pupil * self.fibre_efield
 
-        logamp_var = funcs.logamp_var(pupil, self.freq.main, self.dx, self.h, self.cn2, self.wvl,
-            self.L0, self.l0)
-        self.rand_logamp = numpy.random.normal(
-            loc=0, scale=numpy.sqrt(logamp_var), size=(self.Niter,))
+        # self.rand_logamp = numpy.random.normal(
+        #     loc=0, scale=numpy.sqrt(logamp_var), size=(self.Niter,))
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
 
         self.diffraction_limit = numpy.abs(pupil.sum() * self.dx**2)**2
 
-        self.I = numpy.exp(2 * self.rand_logamp) * numpy.abs(phase_component)**2
+        self.I = numpy.exp(2 * self.logamp) * numpy.abs(phase_component)**2
 
         if self.params['PROP_DIR'] is 'up':
             # Far field intensity
@@ -364,9 +394,16 @@ class SpatialFrequencies():
             fx_axis = numpy.arange(-Nx/2, Nx/2) * df_temporal
             fx_axes.append(fx_axis)
 
-        print(numpy.array(fx_axes).shape)
-        print(fy_axes.shape)
         self.temporal = SpatialFrequencyStruct(numpy.array(fx_axes), fy_axes, rot=numpy.radians(wind_dir), freq_per_layer=True)
+
+    def make_logamp_freqs(self, N=None, dx=None):
+        if N is None and dx is None:
+            self.logamp = self.main
+           
+        else:
+            df = 2*numpy.pi/(N*dx)
+            fx_axis = numpy.arange(-N/2., N/2.) * df
+            self.logamp = SpatialFrequencyStruct(fx_axis)
 
 class SpatialFrequencyStruct():
 
@@ -414,6 +451,9 @@ class SpatialFrequencyStruct():
 
         self.fabs = numpy.sqrt(self.fx**2 + self.fy**2)
 
-    def to_realspace():
-        pass
-        
+    def realspace_sampling(self):
+        Nx = self.fx.shape[-1]
+        Ny = self.fx.shape[-2]
+        dx = 2 * numpy.pi / (Nx * self.dfx)
+        dy = 2 * numpy.pi / (Ny * self.dfy)
+        return dx, dy

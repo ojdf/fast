@@ -3,6 +3,7 @@ from scipy.special import erfc
 from scipy.integrate import simps
 from scipy.optimize import minimize_scalar
 from scipy.ndimage import rotate
+from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
@@ -319,6 +320,15 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
     else:
         raise Exception('ptype must be one of "circ", "gauss" or "axicon"')
 
+def pupil_filter(freq, pupil, spline=False):
+    P = numpy.abs(fouriertransform.ft2(pupil, 1))**2
+    P /= pupil.sum()**2
+
+    if spline:
+        return RectBivariateSpline(freq.fx_axis, freq.fy_axis, P, kx=1, ky=1, s=0)
+    else:
+        return P
+
 def optimize_fibre(pupil, dx, size_min=None, size_max=None):
     N = pupil.shape[-1]
 
@@ -360,12 +370,12 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
 
         return r.T * numpy.sqrt(powerspec)
 
-def temporal_correlation(I):
+def temporal_autocorrelation(I):
     # normalise
     I -= I.mean()
     I /= I.std()
 
-    corr = numpy.correlate(I,I, mode=full)
+    corr = numpy.correlate(I,I, mode='full')
 
     return corr[len(I):] / len(I)
 

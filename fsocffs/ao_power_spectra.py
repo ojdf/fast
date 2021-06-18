@@ -2,7 +2,8 @@ import numpy
 from scipy.special import j1, jv, iv, jve
 from . import funcs 
 from aotools.functions.zernike import zernIndex
-from aotools import cn2_to_r0
+from aotools import cn2_to_r0, fouriertransform
+from scipy.interpolate import RectBivariateSpline
  
 def zernike_ft(fabs, phi, D, n_noll):
     n, m = zernIndex(n_noll)
@@ -156,7 +157,7 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
     midpt_x = int(fx.shape[-2]/2.)
     midpt_y = int(fy.shape[-1]/2.)
 
-    if fx.ndim == 3 and fx.shape[0] == len(p):
+    if freq.freq_per_layer:
         fx_tile = fx
         fy_tile = fy
         alias = numpy.zeros(fabs.shape)
@@ -211,7 +212,7 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
     if mode is 'AO':
         return 1-mask
 
-    if fx.ndim == 3 and fx.shape[0] == len(h):
+    if freq.freq_per_layer:
         fx_tile = fx
         fy_tile = fy
     else:
@@ -244,18 +245,36 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     raise Exception("Shouldn't be here")
 
-def logamp_powerspec(freq, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
+def logamp_powerspec(freq, h, cn2, wvl, pupilfilter=None, layer=True, L0=numpy.inf, l0=1e-6):
 
     fabs = freq.fabs
-    
-    if fabs.ndim == 3 and fabs.shape[0] == len(p):
+
+    if freq.freq_per_layer:
         fabs_3d = fabs
     else:
         fabs_3d = numpy.tile(fabs, (len(h),*[1]*fabs.ndim))
 
-    powerspec = funcs.turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
+    powerspec = funcs.turb_powerspectrum_vonKarman(freq, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
 
     powerspec *= numpy.sin(wvl * h * fabs_3d.T**2 / (4 * numpy.pi)).T**2
+
+    if pupilfilter is not None:
+        if type(pupilfilter) is numpy.ndarray:
+            powerspec *= pupilfilter
+        elif type(pupilfilter) is RectBivariateSpline:
+            # sample at correct spatial frequencies
+            if freq.freq_per_layer:
+                P = numpy.zeros(freq.fx.shape)
+                for i in range(freq.fx_axis.shape[0]):
+                    P[i] = pupilfilter(freq.fy_axis[i], freq.fx_axis[i])
+            else:
+                P = pupilfilter(freq.fy_axis, freq.fx_axis)
+              
+            powerspec *= P
+
+    powerspec_integrated = funcs.integrate_path(powerspec, h, layer=layer)
+
+    return powerspec_integrated
 
 def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
     if mode is 'perfect':
