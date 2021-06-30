@@ -283,21 +283,6 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
 
     return phs
     
-def logamp_var(pupil, freq, dx, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
-    N = pupil.shape[-1]
-
-    fabs_3d = numpy.array([freq.fabs]*len(h))
-
-    powerspec = turb_powerspectrum_vonKarman(freq, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
-
-    P =  numpy.abs(fouriertransform.ft2(pupil, dx))**2
-    P /= (pupil.sum() * dx**2)**2
-
-    integrand = (powerspec * numpy.sin(wvl * h * fabs_3d.T**2 / (4 * numpy.pi)).T**2).sum(0) \
-        * P
-
-    return integrate_powerspectrum(integrand, freq.f)
-
 def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
 
@@ -372,10 +357,11 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
 
 def temporal_autocorrelation(I):
     # normalise
-    I -= I.mean()
-    I /= I.std()
+    Icp = I.copy()
+    Icp -= I.mean()
+    Icp /= I.std()
 
-    corr = numpy.correlate(I,I, mode='full')
+    corr = numpy.correlate(Icp,Icp, mode='full')
 
-    return corr[len(I):] / len(I)
+    return corr[len(Icp):] / len(Icp)
 

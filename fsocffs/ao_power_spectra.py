@@ -4,7 +4,8 @@ from . import funcs
 from aotools.functions.zernike import zernIndex
 from aotools import cn2_to_r0, fouriertransform
 from scipy.interpolate import RectBivariateSpline
- 
+from . import fsocffs
+
 def zernike_ft(fabs, phi, D, n_noll):
     n, m = zernIndex(n_noll)
     if m == 0:
@@ -141,16 +142,19 @@ def Jol_noise_openloop(freq, Dsubap, noise_variance, lf_mask):
     fy = freq.fy
     
     N = noise_variance #* (Dsubap/(2*numpy.pi))**2
+    if freq.freq_per_layer:
+        N /= fabs.shape[0]
     powerspec = N / (fabs**2 * numpy.sinc(Dsubap * fx / (2*numpy.pi))**2 * numpy.sinc(Dsubap * fy / (2*numpy.pi))**2)
     midpt_x = int(powerspec.shape[-2]/2.)
     midpt_y = int(powerspec.shape[-1]/2.)
     powerspec[...,midpt_x, midpt_y] = 0.
+
     return lf_mask * powerspec
 
 def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
-    fabs = freq.fabs
     fx = freq.fx
     fy = freq.fy
+    fabs = freq.fabs
 
     ls = numpy.arange(-lmax, lmax+1)
     ks = numpy.arange(-kmax, kmax+1)
@@ -178,12 +182,15 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
         for k in ks:
             if l == 0 and k == 0:
                 continue
-            fx_shift = fx - 2*numpy.pi * k/Dsubap
-            fy_shift = fy - 2*numpy.pi * l/Dsubap
-            fabs_shift = numpy.sqrt(fx_shift**2 + fy_shift**2)
-            term_1 = (fx/(fy_shift) + fy/(fx_shift))**2
-            term_2 = funcs.turb_powerspectrum_vonKarman(fabs_shift, p, L0=L0, l0=l0)
-            mult = term_1 * term_2 *  fx**2 * fy**2 / fabs**4
+
+            # Quick and dirty SpatialFrequencyStruct here, probably not optimal
+            fx_shift = freq.fx_axis - 2*numpy.pi * k/Dsubap
+            fy_shift = freq.fy_axis - 2*numpy.pi * l/Dsubap
+            freq_shift = fsocffs.SpatialFrequencyStruct(fx_shift, fy_shift, freq_per_layer=freq.freq_per_layer)
+
+            term_1 = (freq.fx/(freq_shift.fy) + freq.fy/(freq_shift.fx))**2
+            term_2 = funcs.turb_powerspectrum_vonKarman(freq_shift, p, L0=L0, l0=l0)
+            mult = term_1 * term_2 *  freq.fx**2 * freq.fy**2 / freq.fabs**4
             mult[...,midpt_x,midpt_y] = 0.
             if l == 0:
                 mult[...,midpt_x,:] = term_2[...,midpt_x,:]
@@ -193,6 +200,11 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
             alias += mult
 
     alias *= sinc_term * lf_mask
+
+    # there is a small chance that there are still some NaNs or infs in the 
+    # array, for specific combinations of freqency axes and subapertures.
+    # Hopefully these lie outside the mask area so just set them to 0.
+    alias[numpy.isnan(alias)] = 0.
 
     return alias
 

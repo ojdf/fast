@@ -23,7 +23,7 @@ class FFS():
         self.dt = params['DT']
 
         if self.Niter % self.Nchunks != 0:
-            raise Exception('NCHUNKS must divite NITER without remainder')
+            raise Exception('NCHUNKS must divide NITER without remainder')
         else:
             self.Niter_per_chunk = self.Niter // self.Nchunks
 
@@ -183,14 +183,14 @@ class FFS():
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
             self.tloop, self.texp)
 
-        if self.alias:
+        if self.alias and self.ao_mode is not 'NOAO':
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.freq.main, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
                 self.texp, self.wvl, 10, 10, self.L0, self.l0)
         else:
             self.alias_powerspec = 0.
 
-        if self.noise > 0:
+        if self.noise > 0 and self.ao_mode is not 'NOAO':
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
                 self.freq.main, self.Dsubap, self.noise, self.lf_mask)
         else:
@@ -199,10 +199,10 @@ class FFS():
         self.powerspec = 2 * numpy.pi * self.k**2 * \
             funcs.integrate_path((self.turb_powerspec * self.G_ao + self.alias_powerspec), h=self.h, layer=self.params['LAYER']) \
             + self.noise_powerspec
+        self.phs_var = funcs.integrate_powerspectrum(self.powerspec, self.freq.main.f)
 
         self.logamp_powerspec = ao_power_spectra.logamp_powerspec(self.freq.main, 
             self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter, layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
-
         self.logamp_var = funcs.integrate_powerspectrum(self.logamp_powerspec, self.freq.main.f)
 
         if self.subharmonics:
@@ -214,7 +214,7 @@ class FFS():
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
-            if self.alias:
+            if self.alias and self.ao_mode is not 'NOAO':
                 self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
                     self.freq.subharm, self.Dsubap, 
                     self.cn2, self.lf_mask_subharm, self.wind_vector, self.texp, self.wvl, 10, 10,
@@ -222,7 +222,7 @@ class FFS():
             else:
                 self.alias_subharm = 0.
 
-            if self.noise > 0:
+            if self.noise > 0 and self.ao_mode is not 'NOAO':
                 self.noise_subharm = ao_power_spectra.Jol_noise_openloop(
                     self.freq.subharm,
                     self.Dsubap, self.noise, self.lf_mask_subharm)
@@ -244,7 +244,7 @@ class FFS():
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
-            if self.alias:
+            if self.alias and self.ao_mode is not 'NOAO':
                 self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
                     self.freq.temporal, self.Dsubap, 
                     self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
@@ -252,10 +252,11 @@ class FFS():
             else:
                 self.alias_temporal = 0.
 
-            if self.noise > 0:
-                self.noise_temporal = ao_power_spectra.Jol_noise_openloop(
-                    self.freq.temporal, 
-                    self.Dsubap, self.noise, self.lf_mask_temporal)
+            if self.noise > 0 and self.ao_mode is not 'NOAO':
+                noise_temporal = ao_power_spectra.Jol_noise_openloop(
+                    self.freq.temporal, self.Dsubap, self.noise, self.lf_mask_temporal)
+                self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=self.params['LAYER'])
+                
             else:
                 self.noise_temporal = 0.
 
@@ -265,6 +266,7 @@ class FFS():
 
             # integrate along y axis
             self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
+            self.temporal_powerspec[len(self.temporal_powerspec)//2] = 0. # ensure the middle is 0!
 
             temporal_logamp_powerspec_beforeintegration = ao_power_spectra.logamp_powerspec(
                 self.freq.temporal, self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter_temporal, 
@@ -287,16 +289,13 @@ class FFS():
                 self.dx, self.fftw, self.temporal, self.temporal_powerspec)
 
             self.logamp[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = \
-                funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec)
+                funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
 
         return self.phs
 
     def compute_I(self, pupil=None):
         if pupil is None:
             pupil = self.pupil * self.fibre_efield
-
-        # self.rand_logamp = numpy.random.normal(
-        #     loc=0, scale=numpy.sqrt(logamp_var), size=(self.Niter,))
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
 
@@ -432,10 +431,10 @@ class SpatialFrequencyStruct():
             for i in range(self._n):
                 self.fx[i], self.fy[i] = numpy.meshgrid(self.fx_axis[i], self.fy_axis[i])
                 if rot is not None:
-                    fx_rot = self.fx * numpy.cos(rot[i]) - self.fy * numpy.sin(rot[i])
-                    fy_rot = self.fx * numpy.sin(rot[i]) + self.fy * numpy.cos(rot[i])
-                    self.fx = fx_rot
-                    self.fy = fy_rot
+                    fx_rot = self.fx[i] * numpy.cos(rot[i]) - self.fy[i] * numpy.sin(rot[i])
+                    fy_rot = self.fx[i] * numpy.sin(rot[i]) + self.fy[i] * numpy.cos(rot[i])
+                    self.fx[i] = fx_rot
+                    self.fy[i] = fy_rot
 
         elif self.fx_axis.ndim == 1:
             self._n = 1
