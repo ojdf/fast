@@ -61,12 +61,12 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
                 out += z * numpy.conjugate(z1)
             else:
                 out += numpy.abs(z)**2
-        mid = int(fabs.shape[0]/2)
+        mid = int(fabs.shape[-1]/2)
 
         if n_noll_start == 1:
-            out[mid, mid] = 1
+            out[...,mid, mid] = 1
         else:
-            out[mid,mid] = 0
+            out[...,mid,mid] = 0
         return out
 
     else:
@@ -229,7 +229,7 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         fy_tile = fy
     else:
         fx_tile = numpy.tile(fx, (len(h),*[1]*fx.ndim))
-        fy_tile = numpy.tile(fy, (len(h),*[1]*fx.ndim))
+        fy_tile = numpy.tile(fy, (len(h),*[1]*fy.ndim))
 
     delta_r_theta = (numpy.tile(dtheta, (len(h),1)).T / 206265. * h ).T
 

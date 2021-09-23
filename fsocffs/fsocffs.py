@@ -5,6 +5,12 @@ from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
 from tqdm import tqdm
 
+try:
+    import pyfftw
+    _pyfftw = True
+except ImportError:
+    _pyfftw = False
+
 class FFS():
     def __init__(self, params):
         '''
@@ -19,6 +25,11 @@ class FFS():
         self.Niter = params['NITER']
         self.Nchunks = params['NCHUNKS']
         self.fftw = params['FFTW']
+
+        if self.fftw and not _pyfftw:
+            print('WARNING: fftw flag set but no pyfftw found, defaulting to no fftw')
+            self.fftw = False
+
         self.temporal = params['TEMPORAL']
         self.dt = params['DT']
 
@@ -183,24 +194,38 @@ class FFS():
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
             self.tloop, self.texp)
 
+        self.aniso_servo_error = funcs.integrate_powerspectrum(funcs.integrate_path(
+            self.G_ao * self.turb_powerspec, self.h, layer=self.params['LAYER']) * self.lf_mask * 2 * numpy.pi * self.k**2, self.freq.main.f)
+
         if self.alias and self.ao_mode is not 'NOAO':
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.freq.main, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
                 self.texp, self.wvl, 10, 10, self.L0, self.l0)
+
+            self.alias_error = funcs.integrate_powerspectrum(funcs.integrate_path(
+                self.alias_powerspec * 2 * numpy.pi * self.k**2, self.h, layer=self.params['LAYER']), self.freq.main.f)
         else:
             self.alias_powerspec = 0.
+            self.alias_error = 0.
 
         if self.noise > 0 and self.ao_mode is not 'NOAO':
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
                 self.freq.main, self.Dsubap, self.noise, self.lf_mask)
+            self.noise_error = funcs.integrate_powerspectrum(self.noise_powerspec, self.freq.main.f)
         else:
             self.noise_powerspec = 0.
+            self.noise_error = 0.
 
-        self.powerspec = 2 * numpy.pi * self.k**2 * \
-            funcs.integrate_path((self.turb_powerspec * self.G_ao + self.alias_powerspec), h=self.h, layer=self.params['LAYER']) \
-            + self.noise_powerspec
+        self.powerspec_per_layer = 2 * numpy.pi * self.k**2 \
+            * (self.turb_powerspec * self.G_ao + self.alias_powerspec) + self.noise_powerspec / len(self.h)
+
+        self.powerspec = funcs.integrate_path(self.powerspec_per_layer, h=self.h, layer=self.params['LAYER'])
+
+        self.fitting_error = funcs.integrate_powerspectrum(self.powerspec * self.hf_mask, self.freq.main.f)
         self.phs_var = funcs.integrate_powerspectrum(self.powerspec, self.freq.main.f)
+        self.phs_var_weights = funcs.integrate_powerspectrum(self.powerspec_per_layer, self.freq.main.f) / self.phs_var
 
+        # Log-amplitude powerspectrum
         self.logamp_powerspec = ao_power_spectra.logamp_powerspec(self.freq.main, 
             self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter, layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
         self.logamp_var = funcs.integrate_powerspectrum(self.logamp_powerspec, self.freq.main.f)
@@ -229,13 +254,38 @@ class FFS():
             else:
                 self.noise_subharm = 0.
 
-            self.powerspec_subharm = 2 * numpy.pi * self.k**2 * \
-                funcs.integrate_path(self.turb_lo * self.G_ao_lo + self.alias_subharm, h=self.h, layer=self.params['LAYER']) \
-                + self.noise_subharm 
+            self.powerspec_subharm_per_layer = 2 * numpy.pi * self.k**2 * \
+                (self.turb_lo * self.G_ao_lo + self.alias_subharm) \
+                + self.noise_subharm / len(self.h)
+
+            self.powerspec_subharm = funcs.integrate_path(self.powerspec_subharm_per_layer, h=self.h, layer=self.params['LAYER']) 
+    
+            self.phs_var_subharm = self.powerspec_subharm_per_layer.sum((-1,-2)) * self.freq.subharm.df**2
+            self.phs_var_weights_sh = self.phs_var_subharm / self.phs_var_subharm.sum()
+
         else:
             self.powerspec_subharm = None
+            self.phs_var_subharm = None
+            self.phs_var_weights_sh = None
+
+        self.temporal_powerspec = None
+        self.temporal_logamp_powerspec = None
+        self.shifts = None
+        self.shifts_sh = None
 
         if self.temporal:
+
+            f_dot_dx = (self.freq.fx[numpy.newaxis,...] * self.wind_vector[:,0,numpy.newaxis, numpy.newaxis] 
+                    + self.freq.fy[numpy.newaxis,...] * self.wind_vector[:,1,numpy.newaxis, numpy.newaxis])
+
+            dts = numpy.arange(0, self.Niter_per_chunk) * self.dt
+            self.shifts = numpy.exp(1j * f_dot_dx* dts[..., numpy.newaxis, numpy.newaxis, numpy.newaxis])
+
+            if self.subharmonics:
+                f_dot_dx_sh = (self.freq.subharm.fx[numpy.newaxis,...] * self.wind_vector[:,0,numpy.newaxis,numpy.newaxis,numpy.newaxis] 
+                            + self.freq.subharm.fy[numpy.newaxis,...] * self.wind_vector[:,1,numpy.newaxis,numpy.newaxis,numpy.newaxis])
+                self.shifts_sh = numpy.exp(1j * f_dot_dx_sh * dts[..., numpy.newaxis, numpy.newaxis, numpy.newaxis, numpy.newaxis])
+
             self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
                 self.freq.temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
 
@@ -266,17 +316,13 @@ class FFS():
 
             # integrate along y axis
             self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
-            self.temporal_powerspec[len(self.temporal_powerspec)//2] = 0. # ensure the middle is 0!
+            # self.temporal_powerspec[len(self.temporal_powerspec)//2] = 0. # ensure the middle is 0!
 
             temporal_logamp_powerspec_beforeintegration = ao_power_spectra.logamp_powerspec(
                 self.freq.temporal, self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter_temporal, 
                 layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
 
             self.temporal_logamp_powerspec = temporal_logamp_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
-
-        else:
-            self.temporal_powerspec = None
-            self.temporal_logamp_powerspec = None
 
     def compute_scrns(self):
 
@@ -286,7 +332,8 @@ class FFS():
         for i in tqdm(range(self.Nchunks)):
             self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
                 self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
-                self.dx, self.fftw, self.temporal, self.temporal_powerspec)
+                self.dx, self.fftw, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
+                self.phs_var_weights, self.phs_var_weights_sh)
 
             self.logamp[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = \
                 funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
@@ -386,7 +433,8 @@ class SpatialFrequencies():
         
         for i in range(nlayer):
             dx = wind_speed[i] * dt
-            df_temporal = 2 * numpy.pi / (Nx * dx)
+            # df_temporal = 2 * numpy.pi / (Nx * dx)
+            df_temporal = 1 / (Nx * dx) # NOTE Linear spatial frequency here!!!
 
             # define x axis according to temporal requirements, and y axis 
             # same as the main y axis, since we will integrate over this one
