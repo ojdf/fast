@@ -1,8 +1,8 @@
 '''
-Test parameter file for FSOCFFS
+Test parameter file for FAST
 '''
 import numpy
-from fsocffs import turbulence_models
+from fast import turbulence_models
 from aotools import equivalent_layers
 
 h = numpy.arange(25000)
@@ -18,6 +18,8 @@ p = {
 'SUBHARM': True,                            # Include subharmonics
 'FFTW': False,                              # Use pyfftw
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
+'TEMPORAL': False,                          # Generate temporal irradiance sequences
+'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
 
 'W0': (1.016-0.35)/2/numpy.sqrt(8),         # 1/e^2 launch beam radius [m]
 'F0': numpy.inf,                            # Launch beam radius of curvature [m]

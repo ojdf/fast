@@ -2,10 +2,19 @@ import numpy
 from scipy.special import erfc
 from scipy.integrate import simps
 from scipy.optimize import minimize_scalar
+from scipy.ndimage import rotate
+from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
-import pyfftw
+from bootstrap import bootstrap
+
+try:
+    import pyfftw
+    _pyfftw = True
+except ImportError:
+    _pyfftw = False
+
 mp_kv = numpy.frompyfunc(mpmath.besselk, 2, 1)
 mp_arraypower = numpy.frompyfunc(mpmath.power, 2, 1)
 
@@ -124,12 +133,12 @@ def integrate_path(integrands, h, layer=False, axis=0):
     else:
         return simps(integrands, x=h, axis=axis)
 
-def turb_powerspectrum_vonKarman(fabs, cn2, L0=25, l0=0.01, C=2*numpy.pi):
+def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     '''
     Von Karman turbulence power spectrum of refractive index.
 
     Parameters
-        fabs (numpy.ndarray): |f| absolute value of spatial frequency
+        freq (SpatialFrequencyStruct): spatial frequency object from sim
         cn2[dh] (float / numpy.ndarray): Refractive index structure constant,
             can be a 1d array for multiple layers. If discrete layers are used 
             then this may be considered the cn2dh value, too.
@@ -137,13 +146,19 @@ def turb_powerspectrum_vonKarman(fabs, cn2, L0=25, l0=0.01, C=2*numpy.pi):
         l0 (float): Inner scale
         C (float): Multiplier for outer scale, i.e. k0=C/L0. Usually either 1 or 2pi
     '''
+    fabs = freq.fabs
     km = 5.92 / l0
     k0 = C / L0
     try:
         nlayers = len(cn2)
         cn2 = numpy.array(cn2)
-        power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T 
+        if freq.freq_per_layer:
+            # we have a 3d fabs array already, with an entry for each layer
+            power_spec = ((0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)).T * cn2).T
+        else:
+            power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T 
     except TypeError:
+        # cn2 is a single float value
         power_spec = numpy.array([0.033 * cn2 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.) ])
 
     # Set any infinite values to 0
@@ -187,9 +202,29 @@ def pdf_gammagamma(Is, alpha, beta):
 
     return pI
 
-def fade_prob(Is_rand, threshold):
-    I_thres = threshold * Is_rand.mean()
-    return (Is_rand<I_thres).sum()/len(Is_rand)
+def fade_prob(I, threshold, min_fades=30):
+    prob = (I<threshold).sum()/len(I)
+    if (I<threshold).sum() < min_fades:
+        # not enough fades
+        return numpy.nan
+    else:
+        return (I<threshold).sum()/len(I)
+
+def fade_dur(I, threshold, dt=1, min_fades=30):
+    fade_mask = I < threshold
+    fade_start = numpy.where(numpy.diff(fade_mask.astype(int)) == 1)[0] + 1
+    fades = numpy.array_split(fade_mask, fade_start)[1:]
+
+    # select only fades that end within the window (i.e. final element is not fading)
+    fades_filt = [i for i in fades if i[-1] != True]
+
+    if len(fades_filt) < min_fades:
+        # not enough fades to characterise duration, return nan
+        return numpy.nan, numpy.nan
+
+    fade_durs = [i.sum() for i in fades_filt]
+    mn, err = bootstrap(fade_durs, subsize=50)
+    return mn * dt, err * dt
 
 def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     if bins is None:
@@ -205,26 +240,31 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
 
     return integral
 
-def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=None,
-                    fys_lo=None, fabss_lo=None, dx=None, fftw=False):
+def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
+                    fftw=False, temporal=False, temporal_powerspec=None, shifts=None, 
+                    shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None):
 
-    rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
+    df = freq.df
+
+    rand = generate_random_coefficients(Nscrns, powerspec, 
+                temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts,
+                weights=phs_var_weights)
 
     if fftw:
         fftw_in = pyfftw.empty_aligned(rand.shape, dtype='complex128')
         fftw_out = pyfftw.empty_aligned(rand.shape, dtype='complex128')
-        fftw_obj = pyfftw.FFTW(fftw_in, fftw_out, axes=((-1,-2)))
-        fftw_in[:] = numpy.fft.fftshift(numpy.sqrt(powerspec) * rand * df, axes=(-1,-2))
+        fftw_obj = pyfftw.FFTW(fftw_in, fftw_out, axes=((-1,-2))) # numpy and fftw have opposite exponents!
+        fftw_in[:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
         phasescrn = numpy.fft.fftshift(fftw_obj(), axes=(-1,-2)).real
 
     else:
-        phasescrn = fouriertransform.ft2(numpy.sqrt(powerspec)*rand*df, 1).real
+        phasescrn = fouriertransform.ift2(rand * df, 1).real
 
     if sh:
         # subharmonics
 
         N = phasescrn.shape[-1]
-        phs_lo = numpy.zeros(phasescrn.shape)
+        phs_lo = numpy.zeros(phasescrn.shape[1:])
         D = dx * N
         coords = numpy.arange(-D/2, D/2, dx)
         if len(coords) == N+1:
@@ -237,17 +277,23 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
 
         for i,p in enumerate(range(1,4)):
             df_lo = 2*numpy.pi/(3**p * D)
-            fx_lo = fxs_lo[i]
-            fy_lo = fys_lo[i]
-            fabs_lo = fabss_lo[i]
+            fx_lo = freq.subharm.fx[i]
+            fy_lo = freq.subharm.fy[i]
+            fabs_lo = freq.subharm.fabs[i]
+            if temporal:
+                shifts_lo = shifts_sh[:,:,i]
+                weights_lo = phs_var_weights_sh[:,i]
+            else:
+                shifts_lo = None
+                weights_lo = None
 
             powerspec_lo = powerspecs_lo[i]
 
             powerspec_lo[1,1] = 0
 
-            rand_lo = (numpy.random.normal(0,1,size=(Nscrns,3,3)) 
-                        + 1j * numpy.random.normal(0,1,size=(Nscrns,3,3))) \
-                             * numpy.sqrt(powerspec_lo) * df_lo
+            rand_lo = generate_random_coefficients(Nscrns, powerspec_lo,
+                        temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts_lo, weights=weights_lo) \
+                            * df_lo
 
             modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
                                   + y[numpy.newaxis,numpy.newaxis,...] * fy_lo[...,numpy.newaxis,numpy.newaxis]))
@@ -272,42 +318,39 @@ def make_phase_fft(Nscrns, powerspec, df, sh=False, powerspecs_lo=None, fxs_lo=N
 
     return phs
     
-def logamp_var(pupil, dx, h, cn2, wvl, L0=numpy.inf, l0=1e-6):
-    N = pupil.shape[-1]
-    fx, fy, fabs, f = f_grid_dx(N, dx)
-    fabs_3d = numpy.array([fabs]*len(h))
-
-    powerspec = turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0) * 2*numpy.pi*(2*numpy.pi/wvl)**2
-
-    P =  numpy.abs(fouriertransform.ft2(pupil, dx))**2
-    P /= (pupil.sum() * dx**2)**2
-
-    integrand = (powerspec * numpy.sin(wvl * h * fabs_3d.T**2 / (4 * numpy.pi)).T**2).sum(0) \
-        * P
-
-    return integrate_powerspectrum(integrand, f)
-
-def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
+def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
 
-    if ptype is 'circ':
+    if ptype == 'circ':
         return circ_ap / numpy.sqrt(circ_ap.sum()*dx**2)
 
-    elif ptype is 'gauss':
+    elif ptype == 'gauss':
         I0 = 2 / (numpy.pi * W0**2)
         return gaussian2d(N, W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
 
-    elif ptype is 'axicon':
+    elif ptype == 'axicon':
         x = numpy.arange(-N/2, N/2, 1) * dx
         xx, yy = numpy.meshgrid(x,x)
         r = numpy.sqrt(xx**2 + yy**2)
-        midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
+        if Raxicon == None:
+            midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
+        else:
+            midpt = Raxicon
         ring = numpy.exp(-(r - midpt)**2 / W0**2) 
         P = (ring**2).sum() * dx**2 
         return ring * circ_ap / numpy.sqrt(P)
 
     else:
         raise Exception('ptype must be one of "circ", "gauss" or "axicon"')
+
+def pupil_filter(freq, pupil, spline=False):
+    P = numpy.abs(fouriertransform.ft2(pupil, 1))**2
+    P /= pupil.sum()**2
+
+    if spline:
+        return RectBivariateSpline(freq.fx_axis, freq.fy_axis, P, kx=1, ky=1, s=0)
+    else:
+        return P
 
 def optimize_fibre(pupil, dx, size_min=None, size_max=None):
     N = pupil.shape[-1]
@@ -330,18 +373,46 @@ def coupling_loss(W, N, pupil, dx):
     coupling = numpy.abs((fibre_field * pupil).sum() * dx**2)**2
     return 1 - coupling
 
-def temporal_powerspec(N, dt, v, cn2, L0=numpy.inf, l0=1e-6):
-    dx = v * dt
-    df = 2*numpy.pi / (N * v * dt)
-    f = numpy.arange(-N/2, N/2) * df
-    fx, fy = numpy.meshgrid(f,f)
-    fabs = numpy.sqrt(fx**2 + fy**2)
+def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None, shifts=None, weights=None):
+
+    if not temporal:
+
+        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) \
+         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
+
+        return rand * numpy.sqrt(powerspec)
+
+    else:
     
-    powerspec = turb_powerspectrum_vonKarman(fabs, cn2, L0=L0, l0=l0)
+        # NEW METHOD
+        if shifts is not None:
 
-    # integrate along orthogonal wind (y) axis
-    powerspec_temporal = simps(powerspec, dx=df, axis=1)
+            r = numpy.random.normal(0,1,size=shifts.shape[1:]) \
+                + 1j * numpy.random.normal(0,1,size=shifts.shape[1:])
 
-    powerspec_temporal /= simps(powerspec_temporal, dx=df, axis=1)
+            r = (r.T * numpy.sqrt(weights)).T
 
-    return powerspec_temporal
+            rand = (r * shifts).sum(1)
+
+            return rand * numpy.sqrt(powerspec)
+
+        else:
+            r_fourier = numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns)) \
+                + 1j * numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns))
+
+            r_fourier *= numpy.sqrt(temporal_powerspecs/temporal_powerspecs.sum())
+
+            r = fouriertransform.ft(r_fourier,1)
+
+            return r.T * numpy.sqrt(powerspec)
+
+def temporal_autocorrelation(I):
+    # normalise
+    Icp = I.copy()
+    Icp -= I.mean()
+    # Icp /= I.std()
+
+    corr = numpy.correlate(Icp,Icp, mode='full')
+
+    return corr[len(Icp)-1:] / len(Icp)
+
