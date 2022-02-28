@@ -1,3 +1,3 @@
-# fsocffs
+# FAST
 
-Free Space Optical Communication Fast Fourier Simulation
+Fourier domain Adaptive optics Simulation Tool

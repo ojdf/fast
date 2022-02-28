@@ -11,7 +11,7 @@ try:
 except ImportError:
     _pyfftw = False
 
-class FFS():
+class Fast():
     def __init__(self, params):
         '''
         Initialise the simulation with a set of parameters.

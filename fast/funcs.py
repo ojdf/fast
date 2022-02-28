@@ -7,6 +7,7 @@ from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
+from bootstrap import bootstrap
 
 try:
     import pyfftw
@@ -201,9 +202,29 @@ def pdf_gammagamma(Is, alpha, beta):
 
     return pI
 
-def fade_prob(Is_rand, threshold):
-    I_thres = threshold * Is_rand.mean()
-    return (Is_rand<I_thres).sum()/len(Is_rand)
+def fade_prob(I, threshold, min_fades=30):
+    prob = (I<threshold).sum()/len(I)
+    if (I<threshold).sum() < min_fades:
+        # not enough fades
+        return numpy.nan
+    else:
+        return (I<threshold).sum()/len(I)
+
+def fade_dur(I, threshold, dt=1, min_fades=30):
+    fade_mask = I < threshold
+    fade_start = numpy.where(numpy.diff(fade_mask.astype(int)) == 1)[0] + 1
+    fades = numpy.array_split(fade_mask, fade_start)[1:]
+
+    # select only fades that end within the window (i.e. final element is not fading)
+    fades_filt = [i for i in fades if i[-1] != True]
+
+    if len(fades_filt) < min_fades:
+        # not enough fades to characterise duration, return nan
+        return numpy.nan, numpy.nan
+
+    fade_durs = [i.sum() for i in fades_filt]
+    mn, err = bootstrap(fade_durs, subsize=50)
+    return mn * dt, err * dt
 
 def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     if bins is None:
@@ -297,7 +318,7 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
 
     return phs
     
-def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
+def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
 
     if ptype == 'circ':
@@ -311,7 +332,10 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, ptype='gauss'):
         x = numpy.arange(-N/2, N/2, 1) * dx
         xx, yy = numpy.meshgrid(x,x)
         r = numpy.sqrt(xx**2 + yy**2)
-        midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
+        if Raxicon == None:
+            midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
+        else:
+            midpt = Raxicon
         ring = numpy.exp(-(r - midpt)**2 / W0**2) 
         P = (ring**2).sum() * dx**2 
         return ring * circ_ap / numpy.sqrt(P)

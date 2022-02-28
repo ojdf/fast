@@ -4,7 +4,7 @@ from . import funcs
 from aotools.functions.zernike import zernIndex
 from aotools import cn2_to_r0, fouriertransform
 from scipy.interpolate import RectBivariateSpline
-from . import fsocffs
+from . import fast
 
 def zernike_ft(fabs, phi, D, n_noll):
     n, m = zernIndex(n_noll)
@@ -254,6 +254,7 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
         aniso_lgs = 1 - term_1_lgs * term_2_lgs + term_2_lgs**2
         Z = zernike_squared_filter(fabs, fx, fy, Tx, 4, n_noll_start=1).real
         return mask * (Z * aniso + (1-Z) * aniso_lgs) + (1-mask)
+        # return (1 - Z) * aniso * (mask * (1 - Z) * aniso_lgs + Z * mask + (1-mask))
 
     raise Exception("Shouldn't be here")
 

@@ -1,8 +1,8 @@
 '''
-Test parameter file for FSOCFFS
+Test parameter file for FAST
 '''
 import numpy
-from fsocffs import turbulence_models
+from fast import turbulence_models
 from aotools import equivalent_layers
 
 h = numpy.arange(25000)
