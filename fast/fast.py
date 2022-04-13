@@ -74,7 +74,6 @@ class Fast():
             # Make sure enough pixels so aperture is not clipped!
             ap_Npxls = int(2*numpy.ceil(params['Tx']/self.dx/2))
 
-            print(ap_Npxls, nyq_Npxls)
             self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
         else:
             self.Npxls = params['NPXLS']
