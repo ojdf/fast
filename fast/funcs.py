@@ -7,7 +7,6 @@ from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import mpmath
-from bootstrap import bootstrap
 
 try:
     import pyfftw
