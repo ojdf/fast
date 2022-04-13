@@ -53,16 +53,28 @@ class Fast():
 
     def init_frequency_grid(self, params):
         if params['DX'] is 'auto':
-            self.dx = params['DSUBAP'] / 2 # Nyquist sample WFS subaperture
+            # Nyquist sample either WFS subap or r0, depending on which is smaller
+            dx_subap = params['DSUBAP'] / 2
+            dx_r0 = self.r0_los / 2
+            self.dx = numpy.min([dx_subap, dx_r0])
         else:
             self.dx = params['DX']
         
         if params['NPXLS'] is 'auto':
-            nyq_paa = numpy.pi / (self.h[-1] * self.paa/206265.) # nyquist sampling of highest spatial frequency required ()
-            nyq_temp = numpy.pi / (max(self.wind_speed) * params['TLOOP'])
-            nyq = numpy.min([nyq_paa, nyq_temp])
+            # Nyquist sample highest spatial frequency required for aniso-servo PSD
+            nyq_aniso = numpy.pi / (self.h[-1] * self.paa/206265.) 
+            nyq_servo = numpy.pi / (max(self.wind_speed) * params['TLOOP'])
+
+            # 10 pixels across AO corrected region (arbitrary...)
+            nyq_fitting = numpy.pi / params['DSUBAP'] / 5
+
+            nyq = numpy.min([nyq_aniso, nyq_servo, nyq_fitting])
             nyq_Npxls = int(2*numpy.ceil(2*numpy.pi/(nyq * self.dx)/2)) # ensure even
+
+            # Make sure enough pixels so aperture is not clipped!
             ap_Npxls = int(2*numpy.ceil(params['Tx']/self.dx/2))
+
+            print(ap_Npxls, nyq_Npxls)
             self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
         else:
             self.Npxls = params['NPXLS']
@@ -91,9 +103,16 @@ class Fast():
             numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
                          numpy.sin(numpy.radians(self.wind_dir))])).T
 
+        # Atmospheric parameters at zenith, at 500 nm
         self.r0 = cn2_to_r0(params['CN2_TURB'].sum(), lamda=500e-9)
         self.theta0 = isoplanaticAngle(params['CN2_TURB'], params['H_TURB'], lamda=500e-9)
         self.tau0 = coherenceTime(params['CN2_TURB'], params['WIND_SPD'], lamda=500e-9)
+
+        # Atmospheric parameters along line of sight (los), at laser wavelength
+        self.r0_los = cn2_to_r0(self.cn2.sum(), lamda=params['WVL'])
+        self.theta0_los = isoplanaticAngle(self.cn2, self.h, lamda=params['WVL'])
+        self.tau0_los = coherenceTime(self.cn2, self.wind_speed, lamda=params['WVL'])
+
         self.L0 = params['L0']
         self.l0 = params['l0']
 
