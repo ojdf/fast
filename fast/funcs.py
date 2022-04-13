@@ -223,8 +223,8 @@ def fade_dur(I, threshold, dt=1, min_fades=30):
         return numpy.nan, numpy.nan
 
     fade_durs = [i.sum() for i in fades_filt]
-    mn, err = bootstrap(fade_durs, subsize=50)
-    return mn * dt, err * dt
+    mn = numpy.mean(fade_durs)
+    return mn * dt
 
 def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     if bins is None:
