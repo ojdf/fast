@@ -186,7 +186,7 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
             # Quick and dirty SpatialFrequencyStruct here, probably not optimal
             fx_shift = freq.fx_axis - 2*numpy.pi * k/Dsubap
             fy_shift = freq.fy_axis - 2*numpy.pi * l/Dsubap
-            freq_shift = fsocffs.SpatialFrequencyStruct(fx_shift, fy_shift, freq_per_layer=freq.freq_per_layer)
+            freq_shift = fast.SpatialFrequencyStruct(fx_shift, fy_shift, freq_per_layer=freq.freq_per_layer)
 
             term_1 = (freq.fx/(freq_shift.fy) + freq.fy/(freq_shift.fx))**2
             term_2 = funcs.turb_powerspectrum_vonKarman(freq_shift, p, L0=L0, l0=l0)
