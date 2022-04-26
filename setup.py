@@ -4,6 +4,7 @@ from distutils.core import setup
 with open("README.rst", "r") as readme:
     long_description= readme.read()
 
+
 setup(
     name='fast',
     author_email='o.j.d.farley@durham.ac.uk',
