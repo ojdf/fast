@@ -240,7 +240,7 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     return integral
 
 def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
-                    fftw=False, temporal=False, temporal_powerspec=None, shifts=None, 
+                    fftw=False, fftw_objs=None, temporal=False, temporal_powerspec=None, shifts=None, 
                     shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None):
 
     df = freq.df
@@ -250,11 +250,9 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
                 weights=phs_var_weights)
 
     if fftw:
-        fftw_in = pyfftw.empty_aligned(rand.shape, dtype='complex128')
-        fftw_out = pyfftw.empty_aligned(rand.shape, dtype='complex128')
-        fftw_obj = pyfftw.FFTW(fftw_in, fftw_out, axes=((-1,-2))) # numpy and fftw have opposite exponents!
-        fftw_in[:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
-        phasescrn = numpy.fft.fftshift(fftw_obj(), axes=(-1,-2)).real
+        fftw_objs['IN'][:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
+        fftw_objs['FFT']()
+        phasescrn = numpy.fft.fftshift(fftw_objs['OUT'], axes=(-1,-2)).real
 
     else:
         phasescrn = fouriertransform.ift2(rand * df, 1).real

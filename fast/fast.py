@@ -26,10 +26,6 @@ class Fast():
         self.Nchunks = params['NCHUNKS']
         self.fftw = params['FFTW']
 
-        if self.fftw and not _pyfftw:
-            print('WARNING: fftw flag set but no pyfftw found, defaulting to no fftw')
-            self.fftw = False
-
         self.temporal = params['TEMPORAL']
         self.dt = params['DT']
 
@@ -45,6 +41,15 @@ class Fast():
         self.init_pupil_mask(self.params)
 
         self.compute_powerspec()
+
+        self.fftw_objs = None
+        if self.fftw:
+            if not _pyfftw:
+                print('WARNING: fftw flag set but no pyfftw found, defaulting to no fftw')
+                self.fftw = False
+            else:
+                # Create fftw objects for later
+                self.init_fftw()
 
     def run(self):
         self.compute_scrns()
@@ -203,6 +208,17 @@ class Fast():
 
         return self.pupil
 
+    def init_fftw(self):
+        s = (self.Niter_per_chunk, *self.powerspec.shape)
+        self.fftw_objs = {}
+        self.fftw_objs['IN'] = pyfftw.empty_aligned(s, dtype='complex128')
+        self.fftw_objs['OUT'] = pyfftw.empty_aligned(s, dtype='complex128')
+        
+        # NOTE: numpy and fftw have opposite exponents!
+        self.fftw_objs['FFT'] = pyfftw.FFTW(self.fftw_objs['IN'], self.fftw_objs['OUT'], 
+                                            axes=((-1,-2)),
+                                            flags=['FFTW_MEASURE', 'FFTW_DESTROY_INPUT']) 
+
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
             self.freq.main, self.cn2, self.L0, self.l0, C=self.params['C'])
@@ -350,7 +366,7 @@ class Fast():
         for i in tqdm(range(self.Nchunks)):
             self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
                 self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
-                self.dx, self.fftw, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
+                self.dx, self.fftw, self.fftw_objs, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
                 self.phs_var_weights, self.phs_var_weights_sh)
 
             self.logamp[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = \
