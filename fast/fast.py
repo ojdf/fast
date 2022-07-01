@@ -409,6 +409,7 @@ class Fast():
         hdr['INRSCALE'] = params['l0']
         hdr['POWER'] = params['POWER'] 
         hdr['PAA'] = self.paa
+        hdr['AO_MODE'] = self.ao_mode
         hdr['TLOOP'] = params['TLOOP'] 
         hdr['TEXP'] = params['TEXP']
         hdr['DSUBAP'] = params['DSUBAP'] 
