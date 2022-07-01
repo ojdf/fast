@@ -25,6 +25,7 @@ class Fast():
         self.Niter = params['NITER']
         self.Nchunks = params['NCHUNKS']
         self.fftw = params['FFTW']
+        self.nthreads = params['FFTW_THREADS']
 
         self.temporal = params['TEMPORAL']
         self.dt = params['DT']
@@ -217,7 +218,8 @@ class Fast():
         # NOTE: numpy and fftw have opposite exponents!
         self.fftw_objs['FFT'] = pyfftw.FFTW(self.fftw_objs['IN'], self.fftw_objs['OUT'], 
                                             axes=((-1,-2)),
-                                            flags=['FFTW_MEASURE', 'FFTW_DESTROY_INPUT']) 
+                                            flags=['FFTW_MEASURE', 'FFTW_DESTROY_INPUT'],
+                                            threads=self.nthreads) 
 
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
