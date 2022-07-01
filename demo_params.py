@@ -17,7 +17,7 @@ p = {
 'NITER': 100,                               # Number of random iterations
 'SUBHARM': True,                            # Include subharmonics
 'FFTW': False,                              # Use pyfftw
-'FFTW_THREADS': 1                           # Number of fftw threads
+'FFTW_THREADS': 1,                          # Number of fftw threads
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
 'TEMPORAL': False,                          # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
