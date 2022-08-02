@@ -63,7 +63,7 @@ class Fast():
 
     def run(self):
         self.compute_scrns()
-        I = self.compute_I()
+        I = self.compute_detector()
         return I
 
     def init_frequency_grid(self, params):
@@ -385,20 +385,25 @@ class Fast():
 
         return self.phs
 
-    def compute_I(self, pupil=None):
+    def compute_detector(self, pupil=None):
         if pupil is None:
             pupil = self.pupil * self.fibre_efield
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
 
-        self.diffraction_limit = numpy.abs(pupil.sum() * self.dx**2)**2
+        if self.params['COHERENT']:
+            # coherent detection (amplitude/phase)
+            self.I = numpy.exp(self.logamp) * phase_component
+            
+        else:
+            # incoherent detection (intensity)
+            self.diffraction_limit = numpy.abs(pupil.sum() * self.dx**2)**2
+            self.I = numpy.exp(2 * self.logamp) * numpy.abs(phase_component)**2
 
-        self.I = numpy.exp(2 * self.logamp) * numpy.abs(phase_component)**2
-
-        if self.params['PROP_DIR'] is 'up':
-            # Far field intensity
-            self.I /= (self.wvl * self.L)**2
-            self.diffraction_limit /= (self.wvl * self.L)**2
+            if self.params['PROP_DIR'] is 'up':
+                # Far field intensity
+                self.I /= (self.wvl * self.L)**2
+                self.diffraction_limit /= (self.wvl * self.L)**2
 
         return self.I
 

@@ -32,6 +32,7 @@ p = {
 'AXICON': True,                             # Axicon (donut) launch shape
 'POWER': 20,                                # Laser power [W]
 'SMF': False,                               # Use single mode fibre (downlink only)
+'COHERENT': False,                          # Coherent detection (SMF only)
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
 'H_TURB': h_el,                             # Turbulence altitudes [m]
