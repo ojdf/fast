@@ -6,16 +6,12 @@ from scipy.ndimage import rotate
 from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
-import mpmath
 
 try:
     import pyfftw
     _pyfftw = True
 except ImportError:
     _pyfftw = False
-
-mp_kv = numpy.frompyfunc(mpmath.besselk, 2, 1)
-mp_arraypower = numpy.frompyfunc(mpmath.power, 2, 1)
 
 def f_grid_linear(L0, l0, max_size=1024):
     '''
@@ -193,13 +189,13 @@ def pdf_lognorm(Is, sigma, Imn=1):
     pdf = 1/(Is * numpy.sqrt(scint * 2*numpy.pi)) * numpy.exp(-(numpy.log(Is/Imn) + 0.5 * scint)**2 / (2*scint))
     return pdf
 
-def pdf_gammagamma(Is, alpha, beta):
-    pI_1 = 2 * mpmath.power(alpha * beta, 0.5 * (alpha + beta))
-    pI_2 = mpmath.gamma(alpha) * mpmath.gamma(beta)
-    pI_3 = mp_arraypower(Is, (0.5 * (alpha+beta) - 1)) * mp_kv(alpha-beta, 2 * numpy.sqrt(alpha * beta * Is))
-    pI = pI_1 * pI_3 / pI_2
+# def pdf_gammagamma(Is, alpha, beta):
+#     pI_1 = 2 * mpmath.power(alpha * beta, 0.5 * (alpha + beta))
+#     pI_2 = mpmath.gamma(alpha) * mpmath.gamma(beta)
+#     pI_3 = mp_arraypower(Is, (0.5 * (alpha+beta) - 1)) * mp_kv(alpha-beta, 2 * numpy.sqrt(alpha * beta * Is))
+#     pI = pI_1 * pI_3 / pI_2
 
-    return pI
+#     return pI
 
 def fade_prob(I, threshold, min_fades=30):
     prob = (I<threshold).sum()/len(I)
