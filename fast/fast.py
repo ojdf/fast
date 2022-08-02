@@ -1,6 +1,7 @@
 import numpy
 from . import funcs
 from . import ao_power_spectra
+from . import conf
 from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
 from tqdm import tqdm
@@ -12,23 +13,31 @@ except ImportError:
     _pyfftw = False
 
 class Fast():
-    def __init__(self, params):
+    def __init__(self, config_fname=None, params=None):
         '''
-        Initialise the simulation with a set of parameters.
+        Initialise the simulation with a config file or dict of parameters.
 
         TODO: Check that all required params are given at initialisation
 
         Parameters:
-            params (dict): Simulation parameters
+            config_fname (string,optional): config file location
+            params (dict,optional): configuration dictionary
         '''
-        self.params = params
-        self.Niter = params['NITER']
-        self.Nchunks = params['NCHUNKS']
-        self.fftw = params['FFTW']
-        self.nthreads = params['FFTW_THREADS']
+        if config_fname != None:
+            self.conf = conf.ConfigParser(config_fname)
+            self.params = self.conf.config
+        elif params != None:
+            self.params = params
+        else:
+            raise Exception("Either config file name or params dict required")
 
-        self.temporal = params['TEMPORAL']
-        self.dt = params['DT']
+        self.Niter = self.params['NITER']
+        self.Nchunks = self.params['NCHUNKS']
+        self.fftw = self.params['FFTW']
+        self.nthreads = self.params['FFTW_THREADS']
+
+        self.temporal = self.params['TEMPORAL']
+        self.dt = self.params['DT']
 
         if self.Niter % self.Nchunks != 0:
             raise Exception('NCHUNKS must divide NITER without remainder')

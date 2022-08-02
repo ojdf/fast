@@ -18,7 +18,7 @@ def zernike_ft(fabs, phi, D, n_noll):
 def zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None):
     phi = numpy.arctan2(fy,fx)
 
-    if gamma is None:
+    if gamma == None:
         out = numpy.zeros(fabs.shape, dtype=complex)
 
         for i in range(n_noll_start, n_noll+1):
@@ -51,7 +51,7 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
     if plusminus:
         phi1 = numpy.arctan2(-fy,-fx)
 
-    if gamma is None:
+    if gamma == None:
         out = numpy.zeros(fabs.shape, dtype=complex)
 
         for i in range(n_noll_start, n_noll+1):
@@ -218,10 +218,10 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
     if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA']:
         raise Exception('Mode not recognised')
 
-    if mode is 'NOAO':
+    if mode == 'NOAO':
         return 1 
 
-    if mode is 'AO':
+    if mode == 'AO':
         return 1-mask
 
     if freq.freq_per_layer:
@@ -245,10 +245,10 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     aniso = 1 - term_1 * term_2 + term_2**2
 
-    if mode is 'AO_PA' or mode is 'TT_PA':
+    if mode == 'AO_PA' or mode == 'TT_PA':
         return aniso * mask + (1-mask)
 
-    if mode is 'LGS_PA':
+    if mode == 'LGS_PA':
         term_1_lgs = 2 * numpy.cos(-tl * v_dot_kappa)
         term_2_lgs = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))
         aniso_lgs = 1 - term_1_lgs * term_2_lgs + term_2_lgs**2
@@ -290,10 +290,10 @@ def logamp_powerspec(freq, h, cn2, wvl, pupilfilter=None, layer=True, L0=numpy.i
     return powerspec_integrated
 
 def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
-    if mode is 'perfect':
+    if mode == 'perfect':
         return 1.
 
-    elif mode is 'zernike':
+    elif mode == 'zernike':
         return zernike_filter(fabs, fx, fy, D, Zmax)
 
     else:
