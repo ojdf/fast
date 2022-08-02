@@ -29,7 +29,7 @@ Config is handled currently by python scripts, an example of which is shown in `
 To start a simulation either in the python shell or in a script, you can either pass the filename of the script defining the config dictionary, or you can provide the dictionary itself, which can be useful if you are scanning through parameters. So
 ```
 import fast
-sim = fast.Fast(your_config_file.py)
+sim = fast.Fast("your_config_file.py")
 ```
 or 
 ```
