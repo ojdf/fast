@@ -197,44 +197,6 @@ def pdf_lognorm(Is, sigma, Imn=1):
 
 #     return pI
 
-def fade_prob(I, threshold, min_fades=30):
-    prob = (I<threshold).sum()/len(I)
-    if (I<threshold).sum() < min_fades:
-        # not enough fades
-        return numpy.nan
-    else:
-        return (I<threshold).sum()/len(I)
-
-def fade_dur(I, threshold, dt=1, min_fades=30):
-    fade_mask = I < threshold
-    fade_start = numpy.where(numpy.diff(fade_mask.astype(int)) == 1)[0] + 1
-    fades = numpy.array_split(fade_mask, fade_start)[1:]
-
-    # select only fades that end within the window (i.e. final element is not fading)
-    fades_filt = [i for i in fades if i[-1] != True]
-
-    if len(fades_filt) < min_fades:
-        # not enough fades to characterise duration, return nan
-        return numpy.nan, numpy.nan
-
-    fade_durs = [i.sum() for i in fades_filt]
-    mn = numpy.mean(fade_durs)
-    return mn * dt
-
-def BER_ook(Is_rand, SNR, bins=None, nbins=100):
-    if bins is None:
-        bins = numpy.logspace(numpy.log10(Is_rand.min()), numpy.log10(Is_rand.max()), nbins)
-
-    weights, edges = numpy.histogram(Is_rand, bins=bins, density=True)
-
-    centres = edges[:-1] + numpy.diff(edges)/2.
-
-    integrand = 0.5 * weights * erfc(SNR * centres/(2*numpy.sqrt(2)))
-
-    integral = simps(integrand, x=centres)
-
-    return integral
-
 def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
                     fftw=False, fftw_objs=None, temporal=False, temporal_powerspec=None, shifts=None, 
                     shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None):

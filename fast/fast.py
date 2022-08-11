@@ -2,6 +2,7 @@ import numpy
 from . import funcs
 from . import ao_power_spectra
 from . import conf
+from . import comms
 from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
 from tqdm import tqdm
@@ -49,6 +50,7 @@ class Fast():
         self.init_beam_params(self.params)
         self.init_ao_params(self.params)
         self.init_pupil_mask(self.params)
+        self.init_phs_logamp()
 
         self.compute_powerspec()
 
@@ -62,9 +64,21 @@ class Fast():
                 self.init_fftw()
 
     def run(self):
-        self.compute_scrns()
-        I = self.compute_detector()
-        return I
+
+        if self.params['COHERENT']:
+            I = numpy.zeros((self.Nchunks, self.Niter_per_chunk), dtype=complex)
+        else:
+            I = numpy.zeros((self.Nchunks, self.Niter_per_chunk))
+
+        for i in tqdm(range(self.Nchunks)):
+            self.compute_phs_logamp()
+            I[i] = self.compute_detector()
+
+        self.I = I.flatten()
+
+        self.compute_modulation()
+        
+        return self.I
 
     def init_frequency_grid(self, params):
         if params['DX'] is 'auto':
@@ -230,6 +244,10 @@ class Fast():
                                             flags=['FFTW_MEASURE', 'FFTW_DESTROY_INPUT'],
                                             threads=self.nthreads) 
 
+    def init_phs_logamp(self):
+        self.phs = numpy.zeros((self.Niter_per_chunk, self.Npxls, self.Npxls))
+        self.logamp = numpy.zeros((self.Niter_per_chunk))
+
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
             self.freq.main, self.cn2, self.L0, self.l0, C=self.params['C'])
@@ -369,19 +387,18 @@ class Fast():
 
             self.temporal_logamp_powerspec = temporal_logamp_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
 
-    def compute_scrns(self):
+    def compute_phs_logamp(self):
 
-        self.phs = numpy.zeros((self.Niter, *self.powerspec.shape))
-        self.logamp = numpy.zeros(self.Niter)
+        self.phs[:] = 0
+        self.logamp[:] = 0
 
-        for i in tqdm(range(self.Nchunks)):
-            self.phs[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = funcs.make_phase_fft(
-                self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
-                self.dx, self.fftw, self.fftw_objs, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
-                self.phs_var_weights, self.phs_var_weights_sh)
+        self.phs[:] = funcs.make_phase_fft(
+            self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
+            self.dx, self.fftw, self.fftw_objs, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
+            self.phs_var_weights, self.phs_var_weights_sh)
 
-            self.logamp[i*self.Niter_per_chunk:(i+1)*self.Niter_per_chunk] = \
-                funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
+        self.logamp[:] = \
+            funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
 
         return self.phs
 
@@ -390,22 +407,26 @@ class Fast():
             pupil = self.pupil * self.fibre_efield
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
-
-        if self.params['COHERENT']:
-            # coherent detection (amplitude/phase)
-            self.I = numpy.exp(self.logamp) * phase_component
+        
+        self.I = numpy.exp(self.logamp) * phase_component
+        self.diffraction_limit = pupil.sum() * self.dx**2
             
-        else:
-            # incoherent detection (intensity)
-            self.diffraction_limit = numpy.abs(pupil.sum() * self.dx**2)**2
-            self.I = numpy.exp(2 * self.logamp) * numpy.abs(phase_component)**2
+        if self.params['PROP_DIR'] is 'up':
+            # Far field intensity
+            self.I /= (self.wvl * self.L)
+            self.diffraction_limit /= (self.wvl * self.L)
 
-            if self.params['PROP_DIR'] is 'up':
-                # Far field intensity
-                self.I /= (self.wvl * self.L)**2
-                self.diffraction_limit /= (self.wvl * self.L)**2
+        if not self.params['COHERENT']:
+            # incoherent detection (intensity)
+            self.I = numpy.abs(self.I)**2
+            self.diffraction_limit = numpy.abs(self.diffraction_limit)**2
 
         return self.I
+
+    def compute_modulation(self):
+        self.modulator = comms.Modulator(self.I, scheme=self.params['MODULATION'])
+        self.modulator.modulate()
+        return self.modulator.recv_signal
 
     def calc_zenith_correction(self, zenith_angle):
         zenith_angle_rads = numpy.radians(zenith_angle)

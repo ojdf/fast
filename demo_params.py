@@ -6,14 +6,14 @@ from fast import turbulence_models
 
 # define turbulence profile and wind speeds
 h = numpy.array([0,5000,10000,15000])
-cn2 = turbulence_models.HV57(h)
+cn2 = turbulence_models.HV57(h) * 100
 w = turbulence_models.Bufton_wind(h)
 wdir = [0,90,180,270]
 
 p = {
 'NPXLS': 'auto',                            # Number of sim pixels (can be "auto") 
 'DX': 'auto',                               # Pixel scale (can be "auto") [m/pixel] 
-'NITER': 100,                               # Number of random iterations
+'NITER': 1000,                               # Number of random iterations
 'SUBHARM': True,                            # Include subharmonics
 'FFTW': False,                              # Use pyfftw
 'FFTW_THREADS': 1,                          # Number of fftw threads
@@ -32,6 +32,7 @@ p = {
 'POWER': 20,                                # Laser power [W]
 'SMF': False,                               # Use single mode fibre (downlink only)
 'COHERENT': False,                          # Coherent detection (SMF only)
+'MODULATION': "OOK",
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
@@ -50,7 +51,7 @@ p = {
 'TLOOP': 0.001,                             # AO loop delay [s]
 'TEXP': 0.001,                              # WFS exposure time
 'ALIAS': True,                              # Include WFS aliasing
-'NOISE': 1.,                                # WFS noise [rad^2 ?]
+'NOISE': 0,                                # WFS noise [rad^2 ?]
 'MODAL': False,                             # Modal (True) or Zonal (False) correction
 'MODAL_MULT': 1,                            # Multiplier to reduce number of modes if required
 'ZMAX': None,
