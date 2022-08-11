@@ -3,13 +3,12 @@ Test parameter file for FAST
 '''
 import numpy
 from fast import turbulence_models
-from aotools import equivalent_layers
 
-h = numpy.arange(25000)
+# define turbulence profile and wind speeds
+h = numpy.array([0,5000,10000,15000])
 cn2 = turbulence_models.HV57(h)
-h_el, cn2dh_el = equivalent_layers(h, cn2, 7)
-
-w = turbulence_models.Bufton_wind(h_el)
+w = turbulence_models.Bufton_wind(h)
+wdir = [0,90,180,270]
 
 p = {
 'NPXLS': 'auto',                            # Number of sim pixels (can be "auto") 
@@ -22,23 +21,23 @@ p = {
 'TEMPORAL': False,                          # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
 
-'W0': (1.016-0.35)/2/numpy.sqrt(8),         # 1/e^2 launch beam radius [m]
+'W0': 0.3,                                  # 1/e^2 launch beam radius [m]
 'F0': numpy.inf,                            # Launch beam radius of curvature [m]
-'Tx': 1.016,                                # Diameter of circular ground aperture [m]
-'Tx_obsc': 0.35,                            # Diameter of central obscuration of ground aperture [m]
+'Tx': 0.8,                                  # Diameter of circular ground aperture [m]
+'Tx_obsc': 0,                               # Diameter of central obscuration of ground aperture [m]
 'Rx': 0.01,                                 # Diameter of circular reciever aperture [m]
 'DTHETA': [4,0],                            # Point ahead (x,y) [arcseconds]
-'WVL': 1064e-9,                             # Laser wavelength [m]
-'AXICON': True,                             # Axicon (donut) launch shape
+'WVL': 1550e-9,                             # Laser wavelength [m]
+'AXICON': False,                            # Axicon (donut) launch shape
 'POWER': 20,                                # Laser power [W]
 'SMF': False,                               # Use single mode fibre (downlink only)
 'COHERENT': False,                          # Coherent detection (SMF only)
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
-'H_TURB': h_el,                             # Turbulence altitudes [m]
-'CN2_TURB': cn2dh_el,                       # Cn2(dh) per turbulence layer [m^-2/3 or m^1/3]
-'WIND_SPD': w,                              # Wind speed per layer
-'WIND_DIR': numpy.ones(len(h_el)) * 90,     # Wind direction per layer
+'H_TURB': h,                                # Turbulence altitudes [m]
+'CN2_TURB': cn2,                            # Cn2(dh) per turbulence layer [m^-2/3 or m^1/3]
+'WIND_SPD': w,                              # Wind speed per layer [m/s]
+'WIND_DIR': wdir,                           # Wind direction per layer [degrees]
 'L0': numpy.inf,                            # Turbulence outer scale [m]
 'l0': 1e-6,                                 # Turbulence inner scale [m]
 'C': 2*numpy.pi,                            # Turbulence power spectrum constant
@@ -51,10 +50,10 @@ p = {
 'TLOOP': 0.001,                             # AO loop delay [s]
 'TEXP': 0.001,                              # WFS exposure time
 'ALIAS': True,                              # Include WFS aliasing
-'NOISE': 1.,                                # WFS noise [rad^2]
+'NOISE': 1.,                                # WFS noise [rad^2 ?]
 'MODAL': False,                             # Modal (True) or Zonal (False) correction
 'MODAL_MULT': 1,                            # Multiplier to reduce number of modes if required
 'ZMAX': None,
-'GTILT': False                             # Use G tilt or Z tilt for Tip/Tilt calcs
+'GTILT': False                              # Use G tilt or Z tilt for Tip/Tilt calcs
 
 }
