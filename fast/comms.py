@@ -2,13 +2,28 @@
 Functions regarding optical communications
 '''
 import numpy
+from . import Fast
 
+class FastFSOC(Fast):
+    '''
+    Subclass of Fast simulation object, adds optical comms functionality 
+    (modulation, demodulation, generating random symbol sequences for testing)
+    '''
 
-class Modulator():
+    def __init__(self, *args, **kwargs):
+        super(FastFSOC, self).__init__(*args, **kwargs)
+        self.scheme = self.params['MODULATION']
 
-    def __init__(self, signal, scheme=None):
-        self.signal = signal
-        self.scheme = scheme
+    def run(self):
+        super(FastFSOC, self).run()
+        self.modulate()
+        self.demodulate()
+        self.compute_sep()
+
+    def make_header(self, params):
+        hdr = super(FastFSOC, self).make_header(params)
+        hdr['MODULATION'] = params['MODULATON']
+        return hdr
 
     def generate_symbols(self):
 
@@ -24,38 +39,41 @@ class Modulator():
         else:
             raise ValueError("Scheme not recognised")
 
-        self.symbols = numpy.random.randint(0, self.nsymbols, size=len(self.signal))
+        self.symbols = numpy.random.randint(0, self.nsymbols, size=len(self.I))
 
     def modulate(self):
 
         if self.scheme == None:
-            self.recv_signal = self.signal
+            self.recv_signal = self.I
             return self.recv_signal
 
         self.generate_symbols()
     
         # incoherent on-off keying
         if self.scheme == "OOK":
-            if self.signal.dtype == complex:
-                self.signal = numpy.abs(self.signal)**2
+            if self.params['COHERENT']:
+                raise ValueError(f"{self.scheme} modulation requires COHERENT=False!")
 
-            self.recv_signal = self.symbols * self.signal
+            self.recv_signal = self.symbols * self.I
             return self.recv_signal
 
         # coherent schemes
-        if self.signal.dtype != complex:
+        if self.I.dtype != complex:
             raise ValueError(f"{self.scheme} modulation requires COHERENT=True!")
 
         elif self.scheme == "BPSK":
             # binary phase shift keying
+            constellation = numpy.exp(1j * numpy.arange(self.nsymbols) * numpy.pi)
             mod = numpy.exp(1j * self.symbols * numpy.pi)
         
         elif self.scheme in ["QPSK", "QAM"]:
             # quadrature PSK, quadrature amplitude modulation (same thing?)
+            constellation = numpy.exp(1j * ((numpy.arange(self.nsymbols) * numpy.pi/2) - numpy.pi/4))
             mod = numpy.exp(1j * ((self.symbols * numpy.pi/2) - numpy.pi/4))
 
         elif (self.scheme[-4:] == "-PSK"):
             # N-PSK
+            constellation = numpy.exp(1j * (numpy.arange(self.nsymbols) * numpy.pi/(self.nsymbols/2)))
             mod = numpy.exp(1j * (self.symbols * numpy.pi/(self.nsymbols/2)))
 
         elif (self.scheme[-4:] == "-QAM"):
@@ -65,17 +83,41 @@ class Modulator():
             xx, yy = numpy.meshgrid(x,x)
             pos = (xx + 1j * yy).flatten()
 
+            constellation = pos
             mod = pos[self.symbols]
 
         else:
             raise ValueError(f"Modulation not found for scheme {self.scheme}")
 
-        self.recv_signal = mod * self.signal
+        self.constellation = abs(self.I).mean() * constellation
+        self.recv_signal = mod * self.I
         return self.recv_signal
 
     def demodulate(self):
-        raise NotImplementedError()
+        
+        if self.scheme == None:
+            self.recv_symbols = None
+        
+        # fast ways for OOK and BPSK
+        if self.scheme == "OOK":
+            cutoff = 0.5 * self.I.mean()
+            self.recv_symbols = (self.recv_signal > cutoff).astype(int)
 
+        elif self.scheme == "BPSK":
+            self.recv_symbols = (self.recv_signal.real < 0).astype(int)
+            
+        else:
+            d = numpy.array([abs(self.recv_signal - i) for i in self.constellation])
+            self.recv_symbols = d.argmin(0)
+
+        return self.recv_symbols
+
+    def compute_sep(self):
+        '''
+        Symbol error probability, from random bits
+        '''
+        self.sep = (self.recv_symbols != self.symbols).sum() / len(self.symbols)
+        return self.sep
     
 
 

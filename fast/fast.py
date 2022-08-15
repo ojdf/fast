@@ -2,7 +2,6 @@ import numpy
 from . import funcs
 from . import ao_power_spectra
 from . import conf
-from . import comms
 from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
 from astropy.io import fits
 from tqdm import tqdm
@@ -14,21 +13,22 @@ except ImportError:
     _pyfftw = False
 
 class Fast():
-    def __init__(self, config_fname=None, params=None):
+    def __init__(self, params):
         '''
         Initialise the simulation with a config file or dict of parameters.
 
         TODO: Check that all required params are given at initialisation
 
         Parameters:
-            config_fname (string,optional): config file location
-            params (dict,optional): configuration dictionary
+            params (string): config file location
+            OR
+            params (dict): configuration dictionary
         '''
-        if config_fname != None:
-            self.conf = conf.ConfigParser(config_fname)
-            self.params = self.conf.config
-        elif params != None:
+        if type(params) == dict:
             self.params = params
+        elif type(params) == str:
+            self.conf = conf.ConfigParser(params)
+            self.params = self.conf.config
         else:
             raise Exception("Either config file name or params dict required")
 
@@ -76,8 +76,6 @@ class Fast():
 
         self.I = I.flatten()
 
-        self.compute_modulation()
-        
         return self.I
 
     def init_frequency_grid(self, params):
@@ -422,11 +420,6 @@ class Fast():
             self.diffraction_limit = numpy.abs(self.diffraction_limit)**2
 
         return self.I
-
-    def compute_modulation(self):
-        self.modulator = comms.Modulator(self.I, scheme=self.params['MODULATION'])
-        self.modulator.modulate()
-        return self.modulator.recv_signal
 
     def calc_zenith_correction(self, zenith_angle):
         zenith_angle_rads = numpy.radians(zenith_angle)
