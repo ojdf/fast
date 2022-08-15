@@ -19,7 +19,7 @@ FAST is pure python, so hopefully there is not anything to compile, just ensure 
 
 To confirm correct installation, try running 
 
-`python test/test_script.py`
+`cd test && python test_script.py`
 
 in the FAST directory, which should run a short simulation. 
 
@@ -35,7 +35,7 @@ or
 ```
 import fast
 p = {your config}
-sim = fast.Fast(params=p)
+sim = fast.Fast(p)
 ```
 ## Running the simulation 
 The simulation is run by calling the `run()` function on the sim object. This will compute the phase screens and log-amplitude values, and then compute the detected power or phase/amplitude for coherent detection. The results are stored in `sim.I` and are also returned from `run()`, i.e. `I = sim.run()`.
