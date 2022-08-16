@@ -12,7 +12,7 @@ class FastFSOC(Fast):
 
     def __init__(self, *args, **kwargs):
         super(FastFSOC, self).__init__(*args, **kwargs)
-        self.scheme = self.params['MODULATION']
+        self.modulation = self.params['MODULATION']
 
     def run(self):
         super(FastFSOC, self).run()
@@ -27,14 +27,14 @@ class FastFSOC(Fast):
 
     def generate_symbols(self):
 
-        if self.scheme in ['OOK', 'BPSK']:
+        if self.modulation in ['OOK', 'BPSK']:
             self.nsymbols = 2
 
-        elif self.scheme in ["QPSK", "QAM"]:
+        elif self.modulation in ["QPSK", "QAM"]:
             self.nsymbols = 4
             
-        elif len(self.scheme.split("-")) ==2:
-            self.nsymbols = int(self.scheme.split("-")[0])
+        elif len(self.modulation.split("-")) ==2:
+            self.nsymbols = int(self.modulation.split("-")[0])
 
         else:
             raise ValueError("Scheme not recognised")
@@ -43,41 +43,47 @@ class FastFSOC(Fast):
 
     def modulate(self):
 
-        if self.scheme == None:
+        if self.modulation == None:
             self.recv_signal = self.I
             return self.recv_signal
 
         self.generate_symbols()
     
         # incoherent on-off keying
-        if self.scheme == "OOK":
+        if self.modulation == "OOK":
             if self.params['COHERENT']:
-                raise ValueError(f"{self.scheme} modulation requires COHERENT=False!")
+                raise ValueError(f"{self.modulation} modulation requires COHERENT=False!")
 
             self.recv_signal = self.symbols * self.I
             return self.recv_signal
 
         # coherent schemes
         if self.I.dtype != complex:
-            raise ValueError(f"{self.scheme} modulation requires COHERENT=True!")
+            raise ValueError(f"{self.modulation} modulation requires COHERENT=True!")
 
-        elif self.scheme == "BPSK":
+        elif self.modulation == "BPSK":
             # binary phase shift keying
             constellation = numpy.exp(1j * numpy.arange(self.nsymbols) * numpy.pi)
             mod = numpy.exp(1j * self.symbols * numpy.pi)
         
-        elif self.scheme in ["QPSK", "QAM"]:
+        elif self.modulation in ["QPSK", "QAM"]:
             # quadrature PSK, quadrature amplitude modulation (same thing?)
             constellation = numpy.exp(1j * ((numpy.arange(self.nsymbols) * numpy.pi/2) - numpy.pi/4))
             mod = numpy.exp(1j * ((self.symbols * numpy.pi/2) - numpy.pi/4))
 
-        elif (self.scheme[-4:] == "-PSK"):
+        elif (self.modulation[-4:] == "-PSK"):
             # N-PSK
             constellation = numpy.exp(1j * (numpy.arange(self.nsymbols) * numpy.pi/(self.nsymbols/2)))
             mod = numpy.exp(1j * (self.symbols * numpy.pi/(self.nsymbols/2)))
 
-        elif (self.scheme[-4:] == "-QAM"):
+        elif (self.modulation[-4:] == "-QAM"):
             # N-QAM
+            
+            # first, check that nsymbols is a perfect square (required for this modulation)
+            if not (numpy.sqrt(self.nsymbols) == numpy.ceil(numpy.sqrt(self.nsymbols))):
+                raise ValueError(f"{self.nsymbols}-QAM not possible as {self.nsymbols} is not a perfect square")
+
+            
             n_side = int(numpy.sqrt(self.nsymbols))
             x = numpy.linspace(-1,1,n_side)
             xx, yy = numpy.meshgrid(x,x)
@@ -87,7 +93,7 @@ class FastFSOC(Fast):
             mod = pos[self.symbols]
 
         else:
-            raise ValueError(f"Modulation not found for scheme {self.scheme}")
+            raise ValueError(f"Modulation not found for scheme {self.modulation}")
 
         self.constellation = abs(self.I).mean() * constellation
         self.recv_signal = mod * self.I
@@ -95,15 +101,15 @@ class FastFSOC(Fast):
 
     def demodulate(self):
         
-        if self.scheme == None:
+        if self.modulation == None:
             self.recv_symbols = None
         
         # fast ways for OOK and BPSK
-        if self.scheme == "OOK":
+        if self.modulation == "OOK":
             cutoff = 0.5 * self.I.mean()
             self.recv_symbols = (self.recv_signal > cutoff).astype(int)
 
-        elif self.scheme == "BPSK":
+        elif self.modulation == "BPSK":
             self.recv_symbols = (self.recv_signal.real < 0).astype(int)
             
         else:

@@ -32,7 +32,7 @@ p = {
 'POWER': 20,                                # Laser power [W] [!NOT USED!]
 'SMF': False,                               # Use single mode fibre (downlink only)
 'COHERENT': False,                          # Coherent detection (SMF only)
-'MODULATION': "QAM",                        # Communications modulation scheme
+'MODULATION': None,                        # Communications modulation scheme
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
