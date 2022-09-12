@@ -95,14 +95,19 @@ class FastFSOC(Fast):
         else:
             raise ValueError(f"Modulation not found for scheme {self.modulation}")
 
+        # Constellation normalised by mean amplitude
         self.constellation = abs(self.I).mean() * constellation
-        self.recv_signal = mod * self.I
+
+        # Received signal loses any atmospheric phase aberrations?
+        self.recv_signal = mod * abs(self.I)
+        
         return self.recv_signal
 
     def demodulate(self):
         
         if self.modulation == None:
             self.recv_symbols = None
+            return self.recv_symbols
         
         # fast ways for OOK and BPSK
         if self.modulation == "OOK":
@@ -122,7 +127,13 @@ class FastFSOC(Fast):
         '''
         Symbol error probability, from random bits
         '''
-        self.sep = (self.recv_symbols != self.symbols).sum() / len(self.symbols)
+
+        if self.modulation == None:
+            self.sep = None
+
+        else:
+            self.sep = (self.recv_symbols != self.symbols).sum() / len(self.symbols)
+            
         return self.sep
     
 
