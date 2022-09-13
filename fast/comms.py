@@ -4,26 +4,16 @@ Functions regarding optical communications
 import numpy
 from . import Fast
 
-class FastFSOC(Fast):
+
+class Modulator():
     '''
-    Subclass of Fast simulation object, adds optical comms functionality 
-    (modulation, demodulation, generating random symbol sequences for testing)
+    Takes series of intensities (or coherent field values) and modulates/demodulates 
+    according to a modulation scheme (OOK, BPSK, QPSK, QAM, etc) with random bits. 
+    This allows Monte Carlo computation of bit error rate or symbol error probability.  
     '''
-
-    def __init__(self, *args, **kwargs):
-        super(FastFSOC, self).__init__(*args, **kwargs)
-        self.modulation = self.params['MODULATION']
-
-    def run(self):
-        super(FastFSOC, self).run()
-        self.modulate()
-        self.demodulate()
-        self.compute_sep()
-
-    def make_header(self, params):
-        hdr = super(FastFSOC, self).make_header(params)
-        hdr['MODULATION'] = params['MODULATON']
-        return hdr
+    def __init__(self, I, modulation):
+        self.I = I
+        self.modulation = modulation
 
     def generate_symbols(self):
 
@@ -52,14 +42,14 @@ class FastFSOC(Fast):
         # incoherent on-off keying
         if self.modulation == "OOK":
             if self.params['COHERENT']:
-                raise ValueError(f"{self.modulation} modulation requires COHERENT=False!")
+                raise ValueError(f"{self.modulation} modulation requires COHERENT=False")
 
             self.recv_signal = self.symbols * self.I
             return self.recv_signal
 
         # coherent schemes
         if self.I.dtype != complex:
-            raise ValueError(f"{self.modulation} modulation requires COHERENT=True!")
+            raise ValueError(f"{self.modulation} modulation requires COHERENT=True")
 
         elif self.modulation == "BPSK":
             # binary phase shift keying
@@ -98,7 +88,8 @@ class FastFSOC(Fast):
         # Constellation normalised by mean amplitude
         self.constellation = abs(self.I).mean() * constellation
 
-        # Received signal loses any atmospheric phase aberrations?
+        # Received signal loses any atmospheric phase aberrations because of 
+        # phase locked loop on reciever?
         self.recv_signal = mod * abs(self.I)
         
         return self.recv_signal
@@ -135,7 +126,29 @@ class FastFSOC(Fast):
             self.sep = (self.recv_symbols != self.symbols).sum() / len(self.symbols)
             
         return self.sep
-    
+
+
+class FastFSOC(Fast):
+    '''
+    Subclass of Fast simulation object, adds optical comms functionality 
+    (modulation, demodulation, generating random symbol sequences for testing)
+    '''
+
+    def __init__(self, *args, **kwargs):
+        super(FastFSOC, self).__init__(*args, **kwargs)
+        self.modulation = self.params['MODULATION']
+
+    def run(self):
+        super(FastFSOC, self).run()
+        self.modulator = Modulator(self.I, self.modulation)
+        self.modulator.modulate()
+        self.modulator.demodulate()
+        self.modulator.compute_sep()
+
+    def make_header(self, params):
+        hdr = super(FastFSOC, self).make_header(params)
+        hdr['MODULATION'] = params['MODULATON']
+        return hdr
 
 
 def fade_prob(I, threshold, min_fades=30):
