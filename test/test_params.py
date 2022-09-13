@@ -47,7 +47,7 @@ p = {
 'PROP_DIR': 'up',                           # Uplink ('up') or downlink ('down') propagation
 
 'AO_MODE': 'AO_PA',                         # AO mode ('AO', 'AO_PA', 'TT_PA', 'LGS_PA', 'NOAO')
-'DSUBAP': 0.02,                             # WFS subaperture pitch [m]
+'DSUBAP': 0.1,                              # WFS subaperture pitch [m]
 'TLOOP': 0.001,                             # AO loop delay [s]
 'TEXP': 0.001,                              # WFS exposure time
 'ALIAS': True,                              # Include WFS aliasing
