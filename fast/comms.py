@@ -3,17 +3,25 @@ Functions regarding optical communications
 '''
 import numpy
 from . import Fast
-
+from aotools import gaussian2d
+from scipy.special import erfc 
+from scipy.ndimage import correlate1d
 
 class Modulator():
     '''
     Takes series of intensities (or coherent field values) and modulates/demodulates 
     according to a modulation scheme (OOK, BPSK, QPSK, QAM, etc) with random bits. 
     This allows Monte Carlo computation of bit error rate or symbol error probability.  
+
+    Parameters:
+        I (numpy.ndarray): Array of intensities/coherent field values 
+        modulation (string): Modulation scheme 
+        N0 (float, optional): Noise variance for AWGN
     '''
-    def __init__(self, I, modulation):
+    def __init__(self, I, modulation, N0=0):
         self.I = I
         self.modulation = modulation
+        self.N0 = N0
 
     def generate_symbols(self):
 
@@ -38,59 +46,39 @@ class Modulator():
             return self.recv_signal
 
         self.generate_symbols()
+
+        if self.N0 > 0:
+            # AWGN (generate complex, if incoherent then take abs)
+            self.awgn = numpy.random.normal(0, self.N0/numpy.sqrt(2), size=len(self.I)) \
+                + 1j * numpy.random.normal(0, self.N0/numpy.sqrt(2), size=len(self.I))
+        else:
+            self.awgn = 0
     
         # incoherent on-off keying
         if self.modulation == "OOK":
             if self.params['COHERENT']:
                 raise ValueError(f"{self.modulation} modulation requires COHERENT=False")
 
-            self.recv_signal = self.symbols * self.I
+            self.recv_signal = self.symbols * self.I + numpy.abs(self.awgn)**2
+            self.Es = (self.symbols * self.I).mean()
             return self.recv_signal
 
         # coherent schemes
         if self.I.dtype != complex:
             raise ValueError(f"{self.modulation} modulation requires COHERENT=True")
 
-        elif self.modulation == "BPSK":
-            # binary phase shift keying
-            constellation = numpy.exp(1j * numpy.arange(self.nsymbols) * numpy.pi)
-            mod = numpy.exp(1j * self.symbols * numpy.pi)
-        
-        elif self.modulation in ["QPSK", "QAM"]:
-            # quadrature PSK, quadrature amplitude modulation (same thing?)
-            constellation = numpy.exp(1j * ((numpy.arange(self.nsymbols) * numpy.pi/2) - numpy.pi/4))
-            mod = numpy.exp(1j * ((self.symbols * numpy.pi/2) - numpy.pi/4))
-
-        elif (self.modulation[-4:] == "-PSK"):
-            # N-PSK
-            constellation = numpy.exp(1j * (numpy.arange(self.nsymbols) * numpy.pi/(self.nsymbols/2)))
-            mod = numpy.exp(1j * (self.symbols * numpy.pi/(self.nsymbols/2)))
-
-        elif (self.modulation[-4:] == "-QAM"):
-            # N-QAM
-            
-            # first, check that nsymbols is a perfect square (required for this modulation)
-            if not (numpy.sqrt(self.nsymbols) == numpy.ceil(numpy.sqrt(self.nsymbols))):
-                raise ValueError(f"{self.nsymbols}-QAM not possible as {self.nsymbols} is not a perfect square")
-
-            
-            n_side = int(numpy.sqrt(self.nsymbols))
-            x = numpy.linspace(-1,1,n_side)
-            xx, yy = numpy.meshgrid(x,x)
-            pos = (xx + 1j * yy).flatten()
-
-            constellation = pos
-            mod = pos[self.symbols]
-
-        else:
-            raise ValueError(f"Modulation not found for scheme {self.modulation}")
+        constellation = define_constellation(self.modulation)
+        mod = constellation[self.symbols]
 
         # Constellation normalised by mean amplitude
         self.constellation = abs(self.I).mean() * constellation
 
+        # calculate average symbol energy Es (useful later)
+        self.Es = (numpy.abs(self.constellation)**2).mean()
+
         # Received signal loses any atmospheric phase aberrations because of 
         # phase locked loop on reciever?
-        self.recv_signal = mod * abs(self.I)
+        self.recv_signal = mod * abs(self.I) + self.awgn
         
         return self.recv_signal
 
@@ -127,6 +115,11 @@ class Modulator():
             
         return self.sep
 
+    def run(self):
+        self.modulate()
+        self.demodulate()
+        self.compute_sep()
+
 
 class FastFSOC(Fast):
     '''
@@ -137,13 +130,12 @@ class FastFSOC(Fast):
     def __init__(self, *args, **kwargs):
         super(FastFSOC, self).__init__(*args, **kwargs)
         self.modulation = self.params['MODULATION']
+        self.N0 = self.params['N0']
 
     def run(self):
         super(FastFSOC, self).run()
-        self.modulator = Modulator(self.I, self.modulation)
-        self.modulator.modulate()
-        self.modulator.demodulate()
-        self.modulator.compute_sep()
+        self.modulator = Modulator(self.I, self.modulation, self.N0)
+        self.modulator.run()
 
     def make_header(self, params):
         hdr = super(FastFSOC, self).make_header(params)
@@ -190,3 +182,157 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     integral = simps(integrand, x=centres)
 
     return integral
+
+
+def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None):
+    '''
+    Method of computing symbol error probability for M-ary QAM under AWGN assumptions
+    given a series of complex field measurements. 
+
+    Bins the Monte Carlo field measurements into a 2D array of npxls x npxls bins. 
+    The overall size of the 2d array is determined by the decision region size, 
+    which depends on the M-ary QAM constellation. This is then convolved with a 
+    gaussian to include AWGN. 
+
+    By integrating this distribution, and averaging over all constellation regions, 
+    we can obtain the probability that a transmitted symbol ends up outside the 
+    decision region, i.e. a symbol error. This [may be] more robust than simply 
+    adding AWGN to the individual Monte Carlo datapoints, because that method 
+    is limited by the number of samples.
+
+    Parameters:
+        samples (numpy.ndarray): Array of Monte Carlo complex field measurements
+        M (int): number of symbols (must be perfect square)
+        npxls (int): Number of pixels to use for binning 
+        EsN0 (float): Symbol signal-to-noise ratio [dB]
+        N0 (float, optional): Noise variance (overrides EsN0)
+
+    Returns:
+        out (numpy.ndarray): (nsymbols x npxls x npxls) array consisting of the 
+            binned histogram for each symbol. To get the SEP from this you would 
+            do 1 - out.sum((1,2)).mean()
+    '''
+    # define constellation
+    constellation = define_constellation(f"{M}-QAM")
+    decision_region_size = 1/(numpy.sqrt(M)-1) # this works and I don't know why
+
+    # normalise constellation to mean amplitude?
+    constellation_norm = constellation * numpy.mean(numpy.abs(samples))
+    decision_region_size_norm = decision_region_size * numpy.mean(numpy.abs(samples))
+
+    # compute noise from desired SNR per symbol (EsN0) if required
+    if N0 == None:
+        Es = numpy.mean(numpy.abs(constellation_norm)**2)
+        N0 = Es / 10**(EsN0/10)
+
+    dx = decision_region_size_norm / npxls
+    x_g = numpy.linspace(-npxls/2, npxls/2, npxls+1) 
+    
+    # compute variance in pixel units. if less than one, set equal to one to avoid 
+    # numerical issues with normalisation
+    sigma2 = N0 / (2 * dx**2)
+    if sigma2 < 1:
+        sigma2 = 1
+
+    g = numpy.exp(-x_g**2 / sigma2) / numpy.sqrt(numpy.pi * sigma2)
+
+    out = numpy.zeros((len(constellation), npxls, npxls))
+
+    for c in range(len(constellation)):
+        x = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1) + constellation_norm[c].real
+        y = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1) + constellation_norm[c].imag
+        
+        samples_norm = constellation[c] * numpy.abs(samples)
+        h = numpy.histogram2d(samples_norm.real, samples_norm.imag, bins=[x,y])[0] / len(samples_norm)
+
+        # perform separated 2d gaussian filter
+        h = correlate1d(h, g, mode='constant', axis=0)
+        h = correlate1d(h, g, mode='constant', axis=1)
+
+        out[c] = h
+
+    return out
+
+
+def define_constellation(modulation):
+    '''
+    Define constellations for coherent modulation schemes. Schemes supported:
+
+    BPSK - Binary Phase Shift Keying
+    QPSK - Quadrature Phase Shift Keying 
+    QAM - Quadrature Amplitude Modulation 
+    M-PSK - M-ary PSK (e.g. 16-PSK)
+    M-QAM - M-ary QAM (e.g. 16-QAM)
+
+    Parameters:
+        modulation (string): Modulation scheme (e.g. "BPSK" or "64-QAM")
+
+    Returns:
+        constellation (numpy.ndarray): Complex array representing the constellation, 
+            of dimension (nsymbols), real and imaginary parts correspond to the
+            two axes of the modulation.
+    '''
+    # coherent schemes
+    if modulation == "BPSK":
+        # binary phase shift keying
+        nsymbols = 2
+        constellation = numpy.exp(1j * numpy.arange(nsymbols) * numpy.pi)
+    
+    elif modulation in ["QPSK", "QAM"]:
+        # quadrature PSK, quadrature amplitude modulation (same thing?)
+        nsymbols = 4
+        constellation = numpy.exp(1j * ((numpy.arange(nsymbols) * numpy.pi/2) - numpy.pi/4))
+
+    elif (modulation[-4:] == "-PSK"):
+        # M-PSK
+        nsymbols = int(modulation[:-4])
+        constellation = numpy.exp(1j * (numpy.arange(nsymbols) * numpy.pi/(nsymbols/2)))
+
+    elif (modulation[-4:] == "-QAM"):
+        # M-QAM
+        # first, check that nsymbols is a perfect square (not bothering with non-square)
+        nsymbols = int(modulation[:-4])
+        if not (numpy.sqrt(nsymbols) == numpy.ceil(numpy.sqrt(nsymbols))):
+            raise ValueError(f"{nsymbols}-QAM not possible as {nsymbols} is not a perfect square, only square M-QAM modulations supported")
+
+        n_side = int(numpy.sqrt(nsymbols))
+        x = numpy.linspace(-1,1,n_side) / numpy.sqrt(2)
+        xx, yy = numpy.meshgrid(x,x)
+        pos = (xx + 1j * yy).flatten()
+
+        constellation = pos
+
+    else:
+        raise ValueError(f"Modulation scheme {modulation} not supported")
+
+    return constellation
+
+
+def Q(x):
+    '''
+    Q function from Rice book
+    '''
+    return 1/2 * erfc(x/numpy.sqrt(2))
+
+
+def sep_qam(M, EsN0):
+    '''
+    Symbol error probabilty for square M-ary QAM, from Rice
+
+    Parameters:
+        M (int): Number of symbols (must be perfect square)
+        EsN0 (float): Symbol signal-to-noise ratio [dB]
+    '''
+    EsN0_frac = 10**(EsN0/10)
+    return 4*(numpy.sqrt(M)-1)/numpy.sqrt(M) * Q(numpy.sqrt(3/(M-1) * EsN0_frac) )
+
+
+def bep_qam(M, EbN0):
+    '''
+    Bit error probability (rate) for square M-ary QAM, from Rice
+
+    Parameters:
+        M (int): Number of symbols (must be perfect square)
+        EbN0 (float): Bit signal-to-noise ratio [dB]
+    '''
+    return 1/numpy.log2(M) * sep_qam(M, 10*numpy.log10(numpy.log2(M)) + EbN0)

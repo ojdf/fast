@@ -32,7 +32,6 @@ p = {
 'POWER': 20,                                # Laser power [W] [!NOT USED!]
 'SMF': False,                               # Use single mode fibre (downlink only)
 'COHERENT': False,                          # Coherent detection (SMF only)
-'MODULATION': None,                        # Communications modulation scheme
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
@@ -55,6 +54,9 @@ p = {
 'MODAL': False,                             # Modal (True) or Zonal (False) correction
 'MODAL_MULT': 1,                            # Multiplier to reduce number of modes if required
 'ZMAX': None,                               # Maximum Zernike index for correction if modal [!NOT USED!]
-'GTILT': False                              # Use G tilt or Z tilt for Tip/Tilt calcs [!NOT USED!]
+'GTILT': False,                             # Use G tilt or Z tilt for Tip/Tilt calcs [!NOT USED!]
+
+'MODULATION': None,                         # Comms modulation scheme
+'N0': 0,                                    # Detector noise [W], for AWGN
 
 }

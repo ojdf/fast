@@ -76,7 +76,6 @@ DEFAULTS = {'NPXLS': 'auto',
             'POWER': 1,
             'SMF': False,
             'COHERENT': False,
-            'MODULATION': None,
             'H_SAT': 36e6,
             'H_TURB': numpy.array([ 0, 10e3]),
             'CN2_TURB': numpy.array([100e-15, 100e-15]),
@@ -97,5 +96,7 @@ DEFAULTS = {'NPXLS': 'auto',
             'MODAL': False,
             'MODAL_MULT': 1,
             'ZMAX': None,
-            'GTILT': False}
+            'GTILT': False,
+            'MODULATION': None, 
+            'N0': 0}
 
