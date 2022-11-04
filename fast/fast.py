@@ -2,7 +2,7 @@ import numpy
 from . import funcs
 from . import ao_power_spectra
 from . import conf
-from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime
+from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime, fouriertransform
 from astropy.io import fits
 from tqdm import tqdm
 
@@ -401,7 +401,7 @@ class Fast():
         return self.phs
 
     def compute_detector(self, pupil=None):
-        if pupil is None:
+        if pupil == None:
             pupil = self.pupil * self.fibre_efield
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
@@ -420,6 +420,28 @@ class Fast():
             self.diffraction_limit = numpy.abs(self.diffraction_limit)**2
 
         return self.I
+
+    def compute_mean_irradiance(self, pupil=None):
+        '''
+        FAST method using Fourier model (no Monte Carlo element)
+        '''
+        if pupil == None:
+            pupil = self.pupil * self.fibre_efield
+
+        phs_otf = fouriertransform.ift2(self.powerspec, self.freq.df)
+        phs_sf = phs_otf[phs_otf.shape[0]//2, phs_otf.shape[1]//2] - phs_otf
+
+        pupil_ft = fouriertransform.ft2(pupil, self.dx)
+        pupil_otf = fouriertransform.ift2(numpy.abs(pupil_ft)**2, self.freq.df) / (2*numpy.pi)**2
+
+        otf = numpy.exp(-phs_sf) * pupil_otf
+
+        psf = fouriertransform.ft2(otf, self.dx).real
+
+        if self.params['PROP_DIR'] is 'up':
+            psf /= (self.wvl * self.L)**2
+            
+        return psf
 
     def calc_zenith_correction(self, zenith_angle):
         zenith_angle_rads = numpy.radians(zenith_angle)
