@@ -17,8 +17,6 @@ class Fast():
         '''
         Initialise the simulation with a config file or dict of parameters.
 
-        TODO: Check that all required params are given at initialisation
-
         Parameters:
             params (string): config file location
             OR
@@ -168,7 +166,7 @@ class Fast():
         self.modal_mult = params['MODAL_MULT']
         self.Gtilt = params['GTILT']
 
-        if self.ao_mode == 'TT_PA':
+        if self.ao_mode == 'TT':
             # force modal correction with tip/tilt
             self.Zmax = 3
             self.modal = True

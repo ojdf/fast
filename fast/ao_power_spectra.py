@@ -215,14 +215,11 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
     fx = freq.fx
     fy = freq.fy
 
-    if mode not in ['NOAO', 'AO', 'AO_PA', 'TT_PA', 'LGS_PA']:
-        raise Exception('Mode not recognised')
+    if mode not in ['NOAO', 'AO', 'TT', 'LGSAO']:
+        raise Exception('Mode not recognised, note that "AO_PA", "TT_PA" and "LGS_PA" are now "AO" and "TT" and "LGSAO')
 
     if mode == 'NOAO':
         return 1 
-
-    if mode == 'AO':
-        return 1-mask
 
     if freq.freq_per_layer:
         fx_tile = fx
@@ -245,10 +242,10 @@ def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     aniso = 1 - term_1 * term_2 + term_2**2
 
-    if mode == 'AO_PA' or mode == 'TT_PA':
+    if mode == 'AO' or mode == 'TT':
         return aniso * mask + (1-mask)
 
-    if mode == 'LGS_PA':
+    if mode == 'LGSAO':
         term_1_lgs = 2 * numpy.cos(-tl * v_dot_kappa)
         term_2_lgs = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))
         aniso_lgs = 1 - term_1_lgs * term_2_lgs + term_2_lgs**2

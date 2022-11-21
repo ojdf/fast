@@ -43,7 +43,7 @@ p = {
 'ZENITH_ANGLE': 55,                         # Zenith angle [degrees]
 'PROP_DIR': 'up',                           # Uplink ('up') or downlink ('down') propagation
 
-'AO_MODE': 'AO_PA',                         # AO mode ('AO', 'AO_PA', 'TT_PA', 'LGS_PA', 'NOAO')
+'AO_MODE': 'AO',                            # AO mode (full AO 'AO', tip-tilt only 'TT', lgs-AO 'LGSAO', no AO 'NOAO')
 'DSUBAP': 0.1,                              # WFS subaperture pitch [m]
 'TLOOP': 0.001,                             # AO loop delay [s]
 'TEXP': 0.001,                              # WFS exposure time
