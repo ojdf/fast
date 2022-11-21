@@ -107,7 +107,7 @@ def integrate_powerspectrum(power_spectrum, f):
     '''
     return simps(simps(power_spectrum, x=f), x=f)
 
-def integrate_path(integrands, h, layer=False, axis=0):
+def integrate_path(integrands, h, layer=True, axis=0):
     '''
     Integrate along the path (i.e. height). Takes into account if the atmosphere 
     is using a discrete layered model with cn2 dh values or a continuous model 

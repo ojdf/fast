@@ -248,13 +248,13 @@ class Fast():
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
             self.freq.main, self.cn2, self.L0, self.l0, C=self.params['C'])
 
-        self.G_ao = ao_power_spectra.G_AO_Jol(
+        self.G_ao = ao_power_spectra.G_AO_PAOLA(
             self.freq.main, self.lf_mask, self.ao_mode, self.h, 
             self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
             self.tloop, self.texp)
 
         self.aniso_servo_error = funcs.integrate_powerspectrum(funcs.integrate_path(
-            self.G_ao * self.turb_powerspec, self.h, layer=self.params['LAYER']) * self.lf_mask * 2 * numpy.pi * self.k**2, self.freq.main.f)
+            self.G_ao * self.turb_powerspec, self.h, layer=True) * self.lf_mask * 2 * numpy.pi * self.k**2, self.freq.main.f)
 
         if self.alias and self.ao_mode is not 'NOAO':
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
@@ -262,7 +262,7 @@ class Fast():
                 self.texp, self.wvl, 10, 10, self.L0, self.l0)
 
             self.alias_error = funcs.integrate_powerspectrum(funcs.integrate_path(
-                self.alias_powerspec * 2 * numpy.pi * self.k**2, self.h, layer=self.params['LAYER']), self.freq.main.f)
+                self.alias_powerspec * 2 * numpy.pi * self.k**2, self.h, layer=True), self.freq.main.f)
         else:
             self.alias_powerspec = 0.
             self.alias_error = 0.
@@ -278,7 +278,7 @@ class Fast():
         self.powerspec_per_layer = 2 * numpy.pi * self.k**2 \
             * (self.turb_powerspec * self.G_ao + self.alias_powerspec) + self.noise_powerspec / len(self.h)
 
-        self.powerspec = funcs.integrate_path(self.powerspec_per_layer, h=self.h, layer=self.params['LAYER'])
+        self.powerspec = funcs.integrate_path(self.powerspec_per_layer, h=self.h, layer=True)
 
         self.fitting_error = funcs.integrate_powerspectrum(self.powerspec * self.hf_mask, self.freq.main.f)
         self.phs_var = funcs.integrate_powerspectrum(self.powerspec, self.freq.main.f)
@@ -286,14 +286,14 @@ class Fast():
 
         # Log-amplitude powerspectrum
         self.logamp_powerspec = ao_power_spectra.logamp_powerspec(self.freq.main, 
-            self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter, layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
+            self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter, layer=True, L0=self.L0, l0=self.l0)
         self.logamp_var = funcs.integrate_powerspectrum(self.logamp_powerspec, self.freq.main.f)
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
                 self.freq.subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
 
-            self.G_ao_lo = ao_power_spectra.G_AO_Jol(
+            self.G_ao_lo = ao_power_spectra.G_AO_PAOLA(
                 self.freq.subharm, self.lf_mask_subharm, 
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
@@ -317,7 +317,7 @@ class Fast():
                 (self.turb_lo * self.G_ao_lo + self.alias_subharm) \
                 + self.noise_subharm / len(self.h)
 
-            self.powerspec_subharm = funcs.integrate_path(self.powerspec_subharm_per_layer, h=self.h, layer=self.params['LAYER']) 
+            self.powerspec_subharm = funcs.integrate_path(self.powerspec_subharm_per_layer, h=self.h, layer=True) 
     
             self.phs_var_subharm = self.powerspec_subharm_per_layer.sum((-1,-2)) * self.freq.subharm.df**2
             self.phs_var_weights_sh = self.phs_var_subharm / self.phs_var_subharm.sum()
@@ -348,7 +348,7 @@ class Fast():
             self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
                 self.freq.temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
 
-            self.G_ao_temporal = ao_power_spectra.G_AO_Jol(
+            self.G_ao_temporal = ao_power_spectra.G_AO_PAOLA(
                 self.freq.temporal, self.lf_mask_temporal, 
                 self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
@@ -364,13 +364,13 @@ class Fast():
             if self.noise > 0 and self.ao_mode is not 'NOAO':
                 noise_temporal = ao_power_spectra.Jol_noise_openloop(
                     self.freq.temporal, self.Dsubap, self.noise, self.lf_mask_temporal)
-                self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=self.params['LAYER'])
+                self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=True)
                 
             else:
                 self.noise_temporal = 0.
 
             temporal_powerspec_beforeintegration = 2 * numpy.pi * self.k**2 * \
-                funcs.integrate_path(self.turb_temporal * self.G_ao_temporal + self.alias_temporal, h=self.h, layer=self.params['LAYER']) \
+                funcs.integrate_path(self.turb_temporal * self.G_ao_temporal + self.alias_temporal, h=self.h, layer=True) \
                 + self.noise_temporal
 
             # integrate along y axis
@@ -379,7 +379,7 @@ class Fast():
 
             temporal_logamp_powerspec_beforeintegration = ao_power_spectra.logamp_powerspec(
                 self.freq.temporal, self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter_temporal, 
-                layer=self.params['LAYER'], L0=self.L0, l0=self.l0)
+                layer=True, L0=self.L0, l0=self.l0)
 
             self.temporal_logamp_powerspec = temporal_logamp_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
 

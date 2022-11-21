@@ -33,13 +33,12 @@ p = {
 
 'H_SAT': 36e6,                              # Satellite height above ground [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
-'CN2_TURB': cn2,                            # Cn2(dh) per turbulence layer [m^-2/3 or m^1/3]
+'CN2_TURB': cn2,                            # Cn2dh per turbulence layer [m^1/3]
 'WIND_SPD': w,                              # Wind speed per layer [m/s]
 'WIND_DIR': wdir,                           # Wind direction per layer [degrees]
 'L0': numpy.inf,                            # Turbulence outer scale [m]
 'l0': 1e-6,                                 # Turbulence inner scale [m]
 'C': 2*numpy.pi,                            # Turbulence power spectrum constant
-'LAYER': True,                              # Cn2 or Cn2dh values (True = Cn2dh)
 'ZENITH_ANGLE': 55,                         # Zenith angle [degrees]
 'PROP_DIR': 'up',                           # Uplink ('up') or downlink ('down') propagation
 

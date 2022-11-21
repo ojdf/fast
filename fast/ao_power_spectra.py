@@ -208,7 +208,7 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
 
     return alias
 
-def G_AO_Jol(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
+def G_AO_PAOLA(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None, 
             wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1):
 
     fabs = freq.fabs
@@ -297,7 +297,7 @@ def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
         raise NotImplementedError('Choose DM that is implemented')
         # TODO add more functions 
 
-def G_AO_Jol_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloop=1., v=None, 
+def G_AO_PAOLA_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloop=1., v=None, 
                         dsubap=None, DM='perfect', Zmax=None, D=None, nu=1, modal=False, modal_mult=1):
 
     Gamma_DM = DM_transfer_function(fx, fy, fabs, mode=DM, Zmax=Zmax, D=D, dsubap=dsubap)
