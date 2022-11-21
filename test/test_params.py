@@ -5,9 +5,7 @@ import numpy
 from fast import turbulence_models
 
 # define turbulence profile and wind speeds, directions
-h = numpy.array([0,5000,10000,15000])
-cn2 = turbulence_models.HV57(h) * 100
-w = turbulence_models.Bufton_wind(h)
+h, cn2, w = turbulence_models.HV57_Bufton_profile(4)
 wdir = [0,90,180,270]
 
 p = {
