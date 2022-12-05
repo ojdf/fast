@@ -31,7 +31,7 @@ p = {
 'SMF': False,                               # Use single mode fibre (downlink only)
 'COHERENT': False,                          # Coherent detection (SMF only)
 
-'H_SAT': 36e6,                              # Satellite height above ground [m]
+'L_SAT': 36e6,                              # Distance from ground to satellite [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
 'CN2_TURB': cn2,                            # Cn2dh per turbulence layer [m^1/3]
 'WIND_SPD': w,                              # Wind speed per layer [m/s]

@@ -118,7 +118,7 @@ class Fast():
         self.zenith_correction = self.calc_zenith_correction(params['ZENITH_ANGLE'])
         self.h = params['H_TURB'] * self.zenith_correction
         self.cn2 = params['CN2_TURB'] * self.zenith_correction
-        self.L = params['H_SAT'] * self.zenith_correction
+        self.L = params['L_SAT']
         self.wind_speed = params['WIND_SPD']
         self.wind_dir = params['WIND_DIR']
         self.dtheta = params['DTHETA']
@@ -466,7 +466,7 @@ class Fast():
         hdr['TX'] = params['Tx']
         hdr['TX_OBSC'] = params['Tx_obsc']
         hdr['AXICON'] = str(params['AXICON'])
-        hdr['H_SAT'] = params['H_SAT']
+        hdr['L_SAT'] = params['L_SAT']
         hdr['DX'] = self.dx
         hdr['NPXLS'] = self.Npxls
         hdr['NITER'] = self.Niter
