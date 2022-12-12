@@ -115,10 +115,26 @@ class Modulator():
             
         return self.sep
 
+    def compute_evm(self):
+        '''
+        Error Vector Magnitude (EVM), from random bits
+        '''
+
+        if self.modulation == None:
+            self.evm = None
+            
+        else:
+            tx_signal = self.constellation[self.symbols]
+            ref = numpy.sqrt((tx_signal.real**2 + tx_signal.imag**2).mean()) # RMS of constellation points
+            self.evm = (abs(tx_signal - self.recv_signal) / ref).mean()
+            
+        return self.evm
+
     def run(self):
         self.modulate()
         self.demodulate()
         self.compute_sep()
+        self.compute_evm()
 
 
 class FastFSOC(Fast):
@@ -205,7 +221,7 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None):
         M (int): number of symbols (must be perfect square)
         npxls (int): Number of pixels to use for binning 
         EsN0 (float): Symbol signal-to-noise ratio [dB]
-        N0 (float, optional): Noise variance (overrides EsN0)
+        N0 (float, optional): Noise variance (overrides EsN0, can be set to 0)
 
     Returns:
         out (numpy.ndarray): (nsymbols x npxls x npxls) array consisting of the 
