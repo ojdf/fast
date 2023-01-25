@@ -13,15 +13,58 @@ except ImportError:
     _pyfftw = False
 
 class Fast():
-    def __init__(self, params):
-        '''
-        Initialise the simulation with a config file or dict of parameters.
+    """Base class of the FAST simulation. 
 
-        Parameters:
-            params (string): config file location
-            OR
-            params (dict): configuration dictionary
-        '''
+    This object is should be created in order to initialise and run simulations,
+    providing a ``params`` object with simulation parameters/configuration. The 
+    ``params`` object may either be a string, in which case it should point to 
+    the location of a config file, i.e. 
+    
+        sim = fast.Fast("/path/to/config.py")
+
+    or a dictionary containing the relevant config information, i.e. 
+    
+        | p = config_dict 
+        | sim = fast.Fast(p)
+    
+    An example params file is located in ``test/test_params.py``. 
+
+    Once created, the simulation will have computed everything required apart 
+    from the Monte Carlo phase screens. This is the most computationally expensive 
+    operation and is started by calling the ``run`` method on the object, i.e.
+
+        I = sim.run()
+
+    This will return a 1D numpy array of values, which are also stored in ``sim.I``. 
+    These values are normalised to the diffraction limit (i.e. no turbulence). To 
+    obtain absolute values of e.g. received power, one can multiply by the 
+    ``sim.diffraction_limit`` parameter which is precomputed based on the link 
+    parameters. A full link budget is stored in ``sim.link_budget``.
+
+    Attributes:
+        I (ndarray): 1D data array storing results of simulation, normalised to 
+            diffraction limit. Created after running ``sim.run()``.
+
+        link_budget (dict): Dictionary containing link budget terms, calculated 
+            at simulation initialisation.
+
+        powerspec (ndarray): 2D AO-corrected residual phase power spectrum. 
+
+        params (dict): Parameter dictionary
+
+        r0 (float): Fried parameter @ 500nm @ zenith
+
+        theta0 (float): Isoplanatic angle @ 500nm @ zenith
+
+        tau0 (float): Coherence time @ 500nm @ zenith
+
+    Args:
+        params (str): file name of config file 
+        OR
+        params (dict): config dict
+    """
+    def __init__(self, params):
+
         if type(params) == dict:
             self.params = params
         elif type(params) == str:
@@ -43,12 +86,13 @@ class Fast():
         else:
             self.Niter_per_chunk = self.Niter // self.Nchunks
 
-        self.init_atmos(self.params)
-        self.init_frequency_grid(self.params)
-        self.init_beam_params(self.params)
-        self.init_ao_params(self.params)
-        self.init_pupil_mask(self.params)
+        self.init_atmos()
+        self.init_beam_params()
+        self.init_frequency_grid()
+        self.init_ao_params()
+        self.init_pupil_mask()
         self.init_phs_logamp()
+        self.compute_link_budget()
 
         self.compute_powerspec()
 
@@ -76,36 +120,38 @@ class Fast():
 
         return self.I
 
-    def init_frequency_grid(self, params):
-        if params['DX'] is 'auto':
-            # Nyquist sample either WFS subap or r0, depending on which is smaller
-            dx_subap = params['DSUBAP'] / 2
+    def init_frequency_grid(self):
+        if self.params['DX'] == 'auto':
+            # Nyquist sample either WFS subap or r0, or ensure 10 pixels 
+            # across pupil (required for very small launched beams)
+            dx_subap = self.params['DSUBAP'] / 2
             dx_r0 = self.r0_los / 2
-            self.dx = numpy.min([dx_subap, dx_r0])
+            dx_pupil = self.D_ground / 10
+            self.dx = numpy.min([dx_subap, dx_r0, dx_pupil])
         else:
-            self.dx = params['DX']
+            self.dx = self.params['DX']
         
-        if params['NPXLS'] is 'auto':
+        if self.params['NPXLS'] == 'auto':
             # Nyquist sample highest spatial frequency required for aniso-servo PSD
             nyq_aniso = numpy.pi / (self.h[-1] * self.paa/206265.) 
-            nyq_servo = numpy.pi / (max(self.wind_speed) * params['TLOOP'])
+            nyq_servo = numpy.pi / (max(self.wind_speed) * self.params['TLOOP'])
 
             # 10 pixels across AO corrected region (arbitrary...)
-            nyq_fitting = numpy.pi / params['DSUBAP'] / 5
+            nyq_fitting = numpy.pi / self.params['DSUBAP'] / 5
 
             nyq = numpy.min([nyq_aniso, nyq_servo, nyq_fitting])
             nyq_Npxls = int(2*numpy.ceil(2*numpy.pi/(nyq * self.dx)/2)) # ensure even
 
             # Make sure enough pixels so aperture is not clipped!
-            ap_Npxls = int(2*numpy.ceil(params['Tx']/self.dx/2))
+            ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2))
 
             self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
         else:
-            self.Npxls = params['NPXLS']
+            self.Npxls = self.params['NPXLS']
 
         self.freq = SpatialFrequencies(self.Npxls, self.dx)
 
-        self.subharmonics = params['SUBHARM']
+        self.subharmonics = self.params['SUBHARM']
 
         if self.subharmonics:
             self.freq.make_subharm_freqs()
@@ -114,57 +160,58 @@ class Fast():
             self.freq.make_temporal_freqs(len(self.h), self.Npxls, self.Niter_per_chunk,
                 self.wind_speed, self.wind_dir, self.dt)
 
-    def init_atmos(self, params):
-        self.zenith_correction = self.calc_zenith_correction(params['ZENITH_ANGLE'])
-        self.h = params['H_TURB'] * self.zenith_correction
-        self.cn2 = params['CN2_TURB'] * self.zenith_correction
-        self.L = params['L_SAT']
-        self.wind_speed = params['WIND_SPD']
-        self.wind_dir = params['WIND_DIR']
-        self.dtheta = params['DTHETA']
+    def init_atmos(self):
+        self.zenith_correction = self.calc_zenith_correction(self.params['ZENITH_ANGLE'])
+        self.h = self.params['H_TURB'] * self.zenith_correction
+        self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
+        self.L = self.params['L_SAT']
+        self.wind_speed = self.params['WIND_SPD']
+        self.wind_dir = self.params['WIND_DIR']
+        self.dtheta = self.params['DTHETA']
         self.paa = numpy.sqrt(self.dtheta[0]**2 + self.dtheta[1]**2)
         self.wind_vector = (self.wind_speed * 
             numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
                          numpy.sin(numpy.radians(self.wind_dir))])).T
 
         # Atmospheric parameters at zenith, at 500 nm
-        self.r0 = cn2_to_r0(params['CN2_TURB'].sum(), lamda=500e-9)
-        self.theta0 = isoplanaticAngle(params['CN2_TURB'], params['H_TURB'], lamda=500e-9)
-        self.tau0 = coherenceTime(params['CN2_TURB'], params['WIND_SPD'], lamda=500e-9)
+        self.r0 = cn2_to_r0(self.params['CN2_TURB'].sum(), lamda=500e-9)
+        self.theta0 = isoplanaticAngle(self.params['CN2_TURB'], self.params['H_TURB'], lamda=500e-9)
+        self.tau0 = coherenceTime(self.params['CN2_TURB'], self.params['WIND_SPD'], lamda=500e-9)
 
         # Atmospheric parameters along line of sight (los), at laser wavelength
-        self.r0_los = cn2_to_r0(self.cn2.sum(), lamda=params['WVL'])
-        self.theta0_los = isoplanaticAngle(self.cn2, self.h, lamda=params['WVL'])
-        self.tau0_los = coherenceTime(self.cn2, self.wind_speed, lamda=params['WVL'])
+        self.r0_los = cn2_to_r0(self.cn2.sum(), lamda=self.params['WVL'])
+        self.theta0_los = isoplanaticAngle(self.cn2, self.h, lamda=self.params['WVL'])
+        self.tau0_los = coherenceTime(self.cn2, self.wind_speed, lamda=self.params['WVL'])
 
-        self.L0 = params['L0']
-        self.l0 = params['l0']
+        self.L0 = self.params['L0']
+        self.l0 = self.params['l0']
 
-    def init_beam_params(self, params):
-        self.W0 = params['W0']
-        self.F0 = params['F0']
-        self.wvl = params['WVL']
+    def init_beam_params(self):
+        self.power = self.params['POWER']
+        self.W0 = self.params['W0']
+        self.F0 = numpy.inf # hard-coded, always launch collimated beam
+        self.wvl = self.params['WVL']
         self.k = 2*numpy.pi/self.wvl
 
         self.Theta_0, self.Lambda_0, self.Theta, self.Lambda, self.Theta_bar = \
-            funcs.calc_gaussian_beam_parameters(self.L, params['F0'], params['W0'], params['WVL'])
-        self.W = params['W0'] * numpy.sqrt(self.Theta_0**2 + self.Lambda_0**2)
+            funcs.calc_gaussian_beam_parameters(self.L, self.F0, self.W0, self.wvl)
+        self.W = self.W0 * numpy.sqrt(self.Theta_0**2 + self.Lambda_0**2)
 
-        self.Tx = params['Tx']
-        self.Tx_obsc = params['Tx_obsc']
-        self.Rx = params['Rx']
+        self.D_ground = self.params['D_GROUND']
+        self.obsc_ground = self.params['OBSC_GROUND']
+        self.D_sat = self.params['D_SAT']
+        self.obsc_sat = self.params['OBSC_SAT']
 
-    def init_ao_params(self, params):
-        self.ao_mode = params['AO_MODE']
-        self.Dsubap = params['DSUBAP']
-        self.tloop = params['TLOOP']
-        self.texp = params['TEXP']
-        self.Zmax = params['ZMAX']
-        self.alias = params['ALIAS']
-        self.noise = params['NOISE']
-        self.modal = params['MODAL']
-        self.modal_mult = params['MODAL_MULT']
-        self.Gtilt = params['GTILT']
+    def init_ao_params(self):
+        self.ao_mode = self.params['AO_MODE']
+        self.Dsubap = self.params['DSUBAP']
+        self.tloop = self.params['TLOOP']
+        self.texp = self.params['TEXP']
+        self.Zmax = self.params['ZMAX']
+        self.alias = self.params['ALIAS']
+        self.noise = self.params['NOISE']
+        self.modal = self.params['MODAL']
+        self.modal_mult = self.params['MODAL_MULT']
 
         if self.ao_mode == 'TT':
             # force modal correction with tip/tilt
@@ -174,34 +221,48 @@ class Fast():
 
         self.lf_mask = ao_power_spectra.mask_lf(self.freq.main, self.Dsubap, 
                     modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax, 
-                    D=self.Tx, Gtilt=self.Gtilt)
+                    D=self.D_ground)
         self.hf_mask = 1 - self.lf_mask
 
         if self.subharmonics:
             self.lf_mask_subharm = ao_power_spectra.mask_lf(self.freq.subharm,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
-                    D=self.Tx, Gtilt=self.Gtilt)
+                    D=self.D_ground)
 
         if self.temporal:
             self.lf_mask_temporal = ao_power_spectra.mask_lf(self.freq.temporal,
                     self.Dsubap, modal=self.modal, modal_mult=self.modal_mult, Zmax=self.Zmax,
-                    D=self.Tx, Gtilt=self.Gtilt)
+                    D=self.D_ground)
 
-    def init_pupil_mask(self, params):
-        if params['PROP_DIR'] is 'up':
-            # Gaussian aperture
-            if params['AXICON']:
+    def init_pupil_mask(self):
+
+        # NOTE setting satellite pupil sampling to be fixed 32 pixels here, should 
+        # probably change this 
+        self.dx_sat = self.D_sat/32
+
+        if self.params['PROP_DIR'] == 'up':
+            # Gaussian aperture at ground
+            if self.params['AXICON']:
                 ptype = 'axicon'
             else:
                 ptype = 'gauss'
 
-            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
-                params['W0'], params['Tx_obsc'], ptype=ptype)
+            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
+                self.W0, self.obsc_ground, ptype=ptype)
+
+            # Circ aperture at satellite
+            self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat,
+                Tx_obsc=self.obsc_sat, ptype='circ') 
+
         else:
             ptype = 'circ'
-            # Circular (fully illuminated) aperture
-            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, params['Tx'], 
-                Tx_obsc=params['Tx_obsc'], ptype=ptype)
+            # Circular (fully illuminated) aperture at ground
+            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
+                Tx_obsc=self.obsc_ground, ptype=ptype)
+
+            # Gaussian aperture at satellite (NOTE hard coded 32 pxls)
+            self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat, 
+                W0=self.W0, Tx_obsc=self.obsc_sat, ptype='gauss')
 
         self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
 
@@ -213,18 +274,20 @@ class Fast():
             dx_req = numpy.pi / f_max
             N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
     
-            pupil_temporal = funcs.compute_pupil(N_req, dx_req, params['Tx'],
-                params['W0'], Tx_obsc=params['Tx_obsc'], ptype=ptype)
+            pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground,
+                self.W0, Tx_obsc=self.obsc_ground, ptype=ptype)
             self.freq.make_logamp_freqs(N=N_req, dx=dx_req)
             self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal, spline=True)
 
-        if params['SMF']:
-            # compute optimal SMF parameters
-            self.smf = True
-            self.fibre_efield = funcs.optimize_fibre(self.pupil, self.dx)
-        else:
-            self.smf = False
-            self.fibre_efield = 1.
+        self.smf = self.params['SMF']
+        self.fibre_efield = 1.
+        self.fibre_efield_sat = 1.
+        if self.smf:
+            # compute optimal SMF parameters at Rx
+            if self.params['PROP_DIR'] == "up":
+                self.fibre_efield_sat = funcs.optimize_fibre(self.pupil_sat, self.dx_sat)
+            else:
+                self.fibre_efield = funcs.optimize_fibre(self.pupil, self.dx)
 
         return self.pupil
 
@@ -246,17 +309,17 @@ class Fast():
 
     def compute_powerspec(self):
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
-            self.freq.main, self.cn2, self.L0, self.l0, C=self.params['C'])
+            self.freq.main, self.cn2, self.L0, self.l0)
 
         self.G_ao = ao_power_spectra.G_AO_PAOLA(
             self.freq.main, self.lf_mask, self.ao_mode, self.h, 
-            self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
+            self.wind_vector, self.dtheta, self.D_ground, self.wvl, self.Zmax, 
             self.tloop, self.texp)
 
         self.aniso_servo_error = funcs.integrate_powerspectrum(funcs.integrate_path(
             self.G_ao * self.turb_powerspec, self.h, layer=True) * self.lf_mask * 2 * numpy.pi * self.k**2, self.freq.main.f)
 
-        if self.alias and self.ao_mode is not 'NOAO':
+        if self.alias and self.ao_mode != 'NOAO':
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.freq.main, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
                 self.texp, self.wvl, 10, 10, self.L0, self.l0)
@@ -267,7 +330,7 @@ class Fast():
             self.alias_powerspec = 0.
             self.alias_error = 0.
 
-        if self.noise > 0 and self.ao_mode is not 'NOAO':
+        if self.noise > 0 and self.ao_mode != 'NOAO':
             self.noise_powerspec = ao_power_spectra.Jol_noise_openloop(
                 self.freq.main, self.Dsubap, self.noise, self.lf_mask)
             self.noise_error = funcs.integrate_powerspectrum(self.noise_powerspec, self.freq.main.f)
@@ -291,14 +354,14 @@ class Fast():
 
         if self.subharmonics:
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
-                self.freq.subharm, self.cn2, self.L0, self.l0, C=self.params['C'])
+                self.freq.subharm, self.cn2, self.L0, self.l0)
 
             self.G_ao_lo = ao_power_spectra.G_AO_PAOLA(
                 self.freq.subharm, self.lf_mask_subharm, 
-                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
+                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.D_ground, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
-            if self.alias and self.ao_mode is not 'NOAO':
+            if self.alias and self.ao_mode != 'NOAO':
                 self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
                     self.freq.subharm, self.Dsubap, 
                     self.cn2, self.lf_mask_subharm, self.wind_vector, self.texp, self.wvl, 10, 10,
@@ -306,7 +369,7 @@ class Fast():
             else:
                 self.alias_subharm = 0.
 
-            if self.noise > 0 and self.ao_mode is not 'NOAO':
+            if self.noise > 0 and self.ao_mode != 'NOAO':
                 self.noise_subharm = ao_power_spectra.Jol_noise_openloop(
                     self.freq.subharm,
                     self.Dsubap, self.noise, self.lf_mask_subharm)
@@ -346,14 +409,14 @@ class Fast():
                 self.shifts_sh = numpy.exp(1j * f_dot_dx_sh * dts[..., numpy.newaxis, numpy.newaxis, numpy.newaxis, numpy.newaxis])
 
             self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
-                self.freq.temporal, self.cn2, self.L0, self.l0, C=self.params['C'])
+                self.freq.temporal, self.cn2, self.L0, self.l0)
 
             self.G_ao_temporal = ao_power_spectra.G_AO_PAOLA(
                 self.freq.temporal, self.lf_mask_temporal, 
-                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.Tx, self.wvl, self.Zmax, 
+                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.D_ground, self.wvl, self.Zmax, 
                 self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
-            if self.alias and self.ao_mode is not 'NOAO':
+            if self.alias and self.ao_mode != 'NOAO':
                 self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
                     self.freq.temporal, self.Dsubap, 
                     self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
@@ -361,7 +424,7 @@ class Fast():
             else:
                 self.alias_temporal = 0.
 
-            if self.noise > 0 and self.ao_mode is not 'NOAO':
+            if self.noise > 0 and self.ao_mode != 'NOAO':
                 noise_temporal = ao_power_spectra.Jol_noise_openloop(
                     self.freq.temporal, self.Dsubap, self.noise, self.lf_mask_temporal)
                 self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=True)
@@ -398,33 +461,93 @@ class Fast():
 
         return self.phs
 
-    def compute_detector(self, pupil=None):
-        if pupil == None:
-            pupil = self.pupil * self.fibre_efield
+    def compute_detector(self):
+
+        pupil = self.pupil * self.fibre_efield
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
         
         self.I = numpy.exp(self.logamp) * phase_component
-        self.diffraction_limit = pupil.sum() * self.dx**2
+        normalisation = pupil.sum() * self.dx**2
+
+        self.I /= normalisation
             
-        if self.params['PROP_DIR'] is 'up':
-            # Far field intensity
-            self.I /= (self.wvl * self.L)
-            self.diffraction_limit /= (self.wvl * self.L)
+        # if self.params['PROP_DIR'] == 'up':
+        #     # Far field intensity
+        #     self.I /= (self.wvl * self.L)
+        #     self.diffraction_limit /= (self.wvl * self.L)
 
         if not self.params['COHERENT']:
             # incoherent detection (intensity)
             self.I = numpy.abs(self.I)**2
-            self.diffraction_limit = numpy.abs(self.diffraction_limit)**2
 
         return self.I
 
-    def compute_mean_irradiance(self, pupil=None):
+    def compute_link_budget(self):
+        '''
+        Compute analytical losses/gains that affect the link. These are:
+
+        power: Laser power expressed in [dBm]
+        free_space: Losses due to free space propagation [dB]
+        transmitter_gain: Gain due to transmitter [dBi]
+        receiver_gain: Gain due to receiver [dBi]
+        transmission_loss: Loss due to atmospheric transmission [dB]        
+        smf_coupling: Losses due to coupling into single mode fibre [dB] (NOTE: this 
+            refers to diffraction limited loss, does not include any 
+            turbulence effects on the coupling)
+    
+        '''
+
+        if self.params['PROP_DIR'] == "up":
+            D_t = self.D_ground
+            D_r = self.D_sat
+            obsc_t = self.obsc_ground
+            obsc_r = self.obsc_sat
+            fib_efield = self.fibre_efield_sat
+            dx_t = self.dx
+            dx_r = self.dx_sat
+            pupil_t = self.pupil
+            pupil_r = self.pupil_sat
+        else:
+            D_t = self.D_sat
+            D_r = self.D_ground
+            obsc_t = self.obsc_sat
+            obsc_r = self.obsc_ground
+            fib_efield = self.fibre_efield
+            dx_t = self.dx_sat
+            dx_r = self.dx
+            pupil_t = self.pupil_sat
+            pupil_r = self.pupil
+
+        self.link_budget = {}
+
+        self.link_budget['power'] = 10*numpy.log10(self.power/1e-3)
+
+        self.link_budget['free_space'] = 10*numpy.log10((self.wvl/(4*numpy.pi*self.L))**2)
+
+        G_t = 10*numpy.log10((pupil_t.sum() * dx_t**2)**2 * 4*numpy.pi / self.wvl**2)
+        self.link_budget['transmitter_gain'] = G_t
+
+        A = numpy.pi * ((D_r/2)**2 - (obsc_r/2)**2)
+        G_r = 10*numpy.log10(4*numpy.pi*A / self.wvl**2)
+        self.link_budget['receiver_gain'] = G_r
+
+        self.link_budget['transmission_loss'] = 10*numpy.log10(self.params['TRANSMISSION'])
+
+        if self.smf:
+            smf_coupling = 10*numpy.log10(((pupil_r * fib_efield).sum() * dx_r**2)**2)
+            self.link_budget['smf_coupling'] = smf_coupling
+
+        self.diffraction_limit = 10**(sum(self.link_budget.values())/10) / 1e3 # W
+
+        return self.link_budget
+
+    def compute_mean_irradiance(self):
         '''
         FAST method using Fourier model (no Monte Carlo element)
         '''
-        if pupil == None:
-            pupil = self.pupil * self.fibre_efield
+
+        pupil = self.pupil * self.fibre_efield
 
         phs_otf = fouriertransform.ift2(self.powerspec, self.freq.df)
         phs_sf = phs_otf[phs_otf.shape[0]//2, phs_otf.shape[1]//2] - phs_otf
@@ -436,7 +559,7 @@ class Fast():
 
         psf = fouriertransform.ft2(otf, self.dx).real
 
-        if self.params['PROP_DIR'] is 'up':
+        if self.params['PROP_DIR'] == 'up':
             psf /= (self.wvl * self.L)**2
             
         return psf
@@ -463,8 +586,10 @@ class Fast():
         hdr['DSUBAP'] = params['DSUBAP'] 
         hdr['ALIAS'] = str(params['ALIAS'])
         hdr['NOISE'] = params['NOISE']
-        hdr['TX'] = params['Tx']
-        hdr['TX_OBSC'] = params['Tx_obsc']
+        hdr['D_GND'] = params['D_GROUND']
+        hdr['OBSC_GND'] = params['Tx_obsc']
+        hdr['D_SAT'] = params['D_SAT']
+        hdr['OBSC_SAT'] = params['obsc_sat']
         hdr['AXICON'] = str(params['AXICON'])
         hdr['L_SAT'] = params['L_SAT']
         hdr['DX'] = self.dx
