@@ -86,6 +86,9 @@ class Fast():
         else:
             self.Niter_per_chunk = self.Niter // self.Nchunks
 
+        if not (self.Niter_per_chunk % 2 == 0):
+            raise Exception('NITER/NCHUNKS must be even number')
+
         self.init_atmos()
         self.init_beam_params()
         self.init_frequency_grid()

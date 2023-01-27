@@ -203,6 +203,11 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
 
     df = freq.df
 
+    # for random scrns, we can use both real and imag parts of produced screens 
+    # which means we only need to generate half the number of scrns 
+    if not temporal:
+        Nscrns //= 2 
+
     rand = generate_random_coefficients(Nscrns, powerspec, 
                 temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts,
                 weights=phs_var_weights)
@@ -210,10 +215,10 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
     if fftw:
         fftw_objs['IN'][:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
         fftw_objs['FFT']()
-        phasescrn = numpy.fft.fftshift(fftw_objs['OUT'], axes=(-1,-2)).real
+        phasescrn = numpy.fft.fftshift(fftw_objs['OUT'], axes=(-1,-2))
 
     else:
-        phasescrn = fouriertransform.ift2(rand * df, 1).real
+        phasescrn = fouriertransform.ift2(rand * df, 1)
 
     if sh:
         # subharmonics
@@ -264,12 +269,16 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
 
             phs_lo = phs_lo + SH
 
-        phs_lo = (phs_lo.real.T - phs_lo.real.mean((1,2))).T
+        phs_lo = (phs_lo.T - phs_lo.mean((1,2))).T
 
     else:
-        phs_lo = 0
+        phs_lo = 0 + 1j*0
     
-    phs = phasescrn + phs_lo
+    if not temporal:
+        phs = (phasescrn + phs_lo)
+        phs = numpy.vstack([phs.real, phs.imag])
+    else:
+        phs = phasescrn.real + phs_lo.real
 
     return phs
     
