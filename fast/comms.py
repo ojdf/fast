@@ -3,7 +3,6 @@ Functions regarding optical communications
 '''
 import numpy
 from . import Fast
-from aotools import gaussian2d
 from scipy.special import erfc 
 from scipy.ndimage import correlate1d
 
@@ -200,9 +199,24 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     return integral
 
 
-def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None):
+def BER_qam(samples, M, npxls, EsN0, N0=None):
+    return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2))
+
+
+def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
     '''
-    Method of computing symbol error probability for M-ary QAM under AWGN assumptions
+    Equation 16 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
+
+    This is for a memoryless receiver (no knowledge of other bits transmitted)
+    '''
+    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full")
+    fy = fyx.mean(0)
+    return numpy.nan_to_num(fyx * numpy.log2(fyx/fy)).sum((-1,-2)).mean()
+
+
+def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"):
+    '''
+    Method of computing received I-Q plane for M-ary QAM under AWGN assumptions
     given a series of complex field measurements. 
 
     Bins the Monte Carlo field measurements into a 2D array of npxls x npxls bins. 
@@ -216,21 +230,27 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None):
     adding AWGN to the individual Monte Carlo datapoints, because that method 
     is limited by the number of samples.
 
-    Parameters:
-        samples (numpy.ndarray): Array of Monte Carlo complex field measurements
+    Args:
+        samples (numpy.ndarray): Array of Monte Carlo complex field measurements or amplitudes
         M (int): number of symbols (must be perfect square)
         npxls (int): Number of pixels to use for binning 
         EsN0 (float): Symbol signal-to-noise ratio [dB]
         N0 (float, optional): Noise variance (overrides EsN0, can be set to 0)
+        separate (bool, optional): Separate each region of the constellation (default: True)
+        region_size (str, optional): "individual" or "full" region to define the PDF (default: "individual")
 
     Returns:
         out (numpy.ndarray): (nsymbols x npxls x npxls) array consisting of the 
-            binned histogram for each symbol. To get the SEP from this you would 
-            do 1 - out.sum((1,2)).mean()
+            binned histogram for each symbol. 
     '''
     # define constellation
     constellation = define_constellation(f"{M}-QAM")
-    decision_region_size = 1/(numpy.sqrt(M)-1) # this works and I don't know why
+    if region_size == "individual":
+        decision_region_size = 1/(numpy.sqrt(M)-1) # this works and I don't know why
+    elif region_size == "full":
+        decision_region_size = 2
+    else:
+        raise ValueError("decision_region_size must be either 'full' or 'individual'")
 
     # normalise constellation to mean amplitude?
     constellation_norm = constellation * numpy.mean(numpy.abs(samples))
@@ -255,9 +275,13 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None):
     out = numpy.zeros((len(constellation), npxls, npxls))
 
     for c in range(len(constellation)):
-        x = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1) + constellation_norm[c].real
-        y = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1) + constellation_norm[c].imag
-        
+        x = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1)
+        y = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1)
+
+        if region_size == "individual":
+            x += constellation_norm[c].real
+            y += constellation_norm[c].imag
+
         samples_norm = constellation[c] * numpy.abs(samples)
         h = numpy.histogram2d(samples_norm.real, samples_norm.imag, bins=[x,y])[0] / len(samples_norm)
 

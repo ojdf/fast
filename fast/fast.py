@@ -95,8 +95,8 @@ class Fast():
         self.init_ao_params()
         self.init_pupil_mask()
         self.init_phs_logamp()
-        self.compute_link_budget()
 
+        self.compute_link_budget()
         self.compute_powerspec()
 
         self.fftw_objs = None
