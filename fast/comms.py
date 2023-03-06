@@ -199,8 +199,8 @@ def BER_ook(Is_rand, SNR, bins=None, nbins=100):
     return integral
 
 
-def BER_qam(samples, M, npxls, EsN0, N0=None):
-    return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2))
+def sep_qam(samples, M, npxls, EsN0, N0=None):
+    return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2)).mean()
 
 
 def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
@@ -210,8 +210,15 @@ def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
     This is for a memoryless receiver (no knowledge of other bits transmitted)
     '''
     fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full")
+
     fy = fyx.mean(0)
-    return numpy.nan_to_num(fyx * numpy.log2(fyx/fy)).sum((-1,-2)).mean()
+    return (fyx * (numpy.ma.log2(fyx)-numpy.ma.log2(fy))).sum((-1,-2)).mean()
+
+
+def mi_old(samples, M, npxls, EsN0, N0=None):
+    fyx =convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full") 
+    fy = fyx.mean(0)
+    return numpy.nan_to_num(fyx * (numpy.log2(fyx)-numpy.log2(fy))).sum((-1,-2)).mean()
 
 
 def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"):
@@ -248,7 +255,7 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     if region_size == "individual":
         decision_region_size = 1/(numpy.sqrt(M)-1) # this works and I don't know why
     elif region_size == "full":
-        decision_region_size = 2
+        decision_region_size = 2 # slightly oversize
     else:
         raise ValueError("decision_region_size must be either 'full' or 'individual'")
 
@@ -260,6 +267,15 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     if N0 == None:
         Es = numpy.mean(numpy.abs(constellation_norm)**2)
         N0 = Es / 10**(EsN0/10)
+    
+    # for large variance, increase the size of decision_region_size for "full" 
+    # type region to include +2sigma and avoid clipping the calculated PDF
+    if region_size == "full":
+        region_size_required = 2*(numpy.mean(numpy.abs(samples))/numpy.sqrt(2) + 2 * numpy.sqrt(N0))
+        if region_size_required > decision_region_size_norm:
+            print("AWGN noise level too large for region, increasing region size")
+            # npxls = int(numpy.round(npxls * region_size_required / decision_region_size_norm))
+            decision_region_size_norm = region_size_required 
 
     dx = decision_region_size_norm / npxls
     x_g = numpy.linspace(-npxls/2, npxls/2, npxls+1) 
@@ -292,6 +308,11 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
         out[c] = h
 
     return out
+
+
+# def _estimate_region_pad(sigma):
+#     corner = 
+    
 
 
 def define_constellation(modulation):
@@ -355,7 +376,7 @@ def Q(x):
     return 1/2 * erfc(x/numpy.sqrt(2))
 
 
-def sep_qam(M, EsN0):
+def sep_qam_analytic(M, EsN0):
     '''
     Symbol error probabilty for square M-ary QAM, from Rice
 
@@ -367,7 +388,7 @@ def sep_qam(M, EsN0):
     return 4*(numpy.sqrt(M)-1)/numpy.sqrt(M) * Q(numpy.sqrt(3/(M-1) * EsN0_frac) )
 
 
-def bep_qam(M, EbN0):
+def bep_qam_analytic(M, EbN0):
     '''
     Bit error probability (rate) for square M-ary QAM, from Rice
 
@@ -376,3 +397,24 @@ def bep_qam(M, EbN0):
         EbN0 (float): Bit signal-to-noise ratio [dB]
     '''
     return 1/numpy.log2(M) * sep_qam(M, 10*numpy.log10(numpy.log2(M)) + EbN0)
+
+
+def mutual_information_awgn_analytic(M, EsN0, nrand=10000):
+    '''
+    Eq. 28 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
+    '''
+    constellation = define_constellation(f"{M}-QAM")
+    Es = numpy.mean(numpy.abs(constellation)**2)
+    snr_linear = 10**(EsN0/10)
+    N0 = Es / snr_linear
+    r = numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand) + 1j *numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand)
+    rabs = numpy.abs(r)**2
+    snr_linear = Es / N0
+
+    f = [[numpy.exp(-snr_linear * (2*(numpy.conjugate(xi - xj) * r).real + rabs))
+            for xi in constellation] for xj in constellation]
+    f = numpy.array(f).sum(0)
+    f = numpy.log2(f)
+
+    return numpy.log2(M) - f.mean()
+        
