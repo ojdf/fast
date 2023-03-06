@@ -2,6 +2,8 @@
 
 FAST is a simulation tool that utilises a Fourier domain AO model to enable rapid Monte Carlo characterisation of free space optical links between the Earth and satellites. For more details, see the paper [https://doi.org/10.1364/OE.458659](https://doi.org/10.1364/OE.458659).
 
+WARNING: FAST is under active development and the simulation API and configuration is not fixed. If you find a bug, or something is not working as you would expect, please email me or make an issue on GitHub, it's likely I've broken something! 
+
 ## Requirements
 ```
 numpy
