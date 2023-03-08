@@ -5,6 +5,7 @@ import numpy
 from . import Fast
 from scipy.special import erfc 
 from scipy.ndimage import correlate1d
+from scipy.integrate import simps
 
 class Modulator():
     '''
@@ -203,6 +204,46 @@ def sep_qam(samples, M, npxls, EsN0, N0=None):
     return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2)).mean()
 
 
+def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None):
+    '''
+    Generalised Mutual Information (GMI), adapted from Alvarado et al (2016) 
+    [10.1109/JLT.2015.2450537] and Cho et al (2017) [10.1109/ECOC.2017.8345872].
+
+    Assumes 
+        1) Perfect interleaving (no correlation between bits)
+        2) Bit-wise decoder (no memory of other bits sent)
+        3) Gray encoding of QAM symbols
+        4) Soft decision decoding with FEC 
+
+    Args:
+        samples (numpy.ndarray): Array of Monte Carlo complex field measurements or amplitudes
+        M (int): number of symbols (must be perfect square)
+        npxls (int): Number of pixels to use for binning 
+        EsN0 (float): Symbol signal-to-noise ratio [dB]
+        N0 (float, optional): Noise variance (overrides EsN0, can be set to 0)
+
+    Returns:
+        GMI (float): the generalised mutual information value, in bits/symbol
+    '''
+    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full")
+    fy = fyx.mean(0)
+    log2_fy = numpy.ma.log2(fy)
+
+    gray_code = _bin2gray_qam(M)
+    m = int(numpy.log2(M))
+    gmi = numpy.zeros((m, 2, npxls, npxls))
+    for i in range(m):
+        ix = _bit_at_index(gray_code, i, 0)
+        fyb_0 = fyx[ix].mean(0)
+        fyb_1 = fyx[~ix].mean(0)
+        log2_fyb_0 = numpy.ma.log2(fyb_0)
+        log2_fyb_1 = numpy.ma.log2(fyb_1)
+        gmi[i,0] = fyb_0 * (log2_fyb_0 - log2_fy)
+        gmi[i,1] = fyb_1 * (log2_fyb_1 - log2_fy)
+
+    return gmi.sum((-1,-2)).mean(1).sum()
+
+
 def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
     '''
     Equation 16 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
@@ -213,12 +254,6 @@ def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
 
     fy = fyx.mean(0)
     return (fyx * (numpy.ma.log2(fyx)-numpy.ma.log2(fy))).sum((-1,-2)).mean()
-
-
-def mi_old(samples, M, npxls, EsN0, N0=None):
-    fyx =convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full") 
-    fy = fyx.mean(0)
-    return numpy.nan_to_num(fyx * (numpy.log2(fyx)-numpy.log2(fy))).sum((-1,-2)).mean()
 
 
 def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"):
@@ -310,11 +345,6 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     return out
 
 
-# def _estimate_region_pad(sigma):
-#     corner = 
-    
-
-
 def define_constellation(modulation):
     '''
     Define constellations for coherent modulation schemes. Schemes supported:
@@ -369,6 +399,42 @@ def define_constellation(modulation):
     return constellation
 
 
+def _bin2gray_qam(M):
+
+    m = int(numpy.log2(M))
+    symbols = numpy.arange(M, dtype=int)
+    symbols_bin = [bin(i)[2:].zfill(m) for i in symbols]
+    symbols_gray = []
+
+    for s in symbols_bin:
+
+        sgray = s[0]
+        for i in range(len(s)-1):
+            sgray += str(int(s[i]) ^ int(s[i+1]))
+
+        symbols_gray.append(sgray)
+
+    # flip every other row
+    nside = int(numpy.sqrt(M))
+    tmp = numpy.array(symbols_gray).reshape(nside, nside).copy()
+    for i in tmp[1::2]:
+        i[:] = i[::-1]
+    
+    symbols_gray = tmp.flatten()
+
+    return symbols_gray
+
+
+def _bit_at_index(code, index, bit):
+
+    bit = str(bit)
+    out = numpy.zeros(len(code), dtype=bool)
+    for i,c in enumerate(code): 
+        out[i] = c[index] == str(bit)
+
+    return out
+
+
 def Q(x):
     '''
     Q function from Rice book
@@ -399,22 +465,23 @@ def bep_qam_analytic(M, EbN0):
     return 1/numpy.log2(M) * sep_qam(M, 10*numpy.log10(numpy.log2(M)) + EbN0)
 
 
-def mutual_information_awgn_analytic(M, EsN0, nrand=10000):
-    '''
-    Eq. 28 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
-    '''
-    constellation = define_constellation(f"{M}-QAM")
-    Es = numpy.mean(numpy.abs(constellation)**2)
-    snr_linear = 10**(EsN0/10)
-    N0 = Es / snr_linear
-    r = numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand) + 1j *numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand)
-    rabs = numpy.abs(r)**2
-    snr_linear = Es / N0
+# def mutual_information_awgn_analytic(M, EsN0, nrand=10000):
+#     '''
+#     Eq. 28 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
+#     '''
+#     constellation = define_constellation(f"{M}-QAM")
+#     Es = numpy.mean(numpy.abs(constellation)**2)
+#     EsN0_linear = 10**(EsN0/10)
+#     N0 = Es / EsN0_linear
+#     r = numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand) + 1j *numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand)
+#     rabs = numpy.abs(r)**2
+#     snr_linear = Es / (N0 * numpy.pi/2)
 
-    f = [[numpy.exp(-snr_linear * (2*(numpy.conjugate(xi - xj) * r).real + rabs))
-            for xi in constellation] for xj in constellation]
-    f = numpy.array(f).sum(0)
-    f = numpy.log2(f)
+#     f = [[numpy.exp(-snr_linear * (2*(numpy.conjugate(xi - xj) * r).real + rabs))
+#             for xi in constellation] for xj in constellation]
 
-    return numpy.log2(M) - f.mean()
+#     f = numpy.array(f).sum(0)
+#     f = numpy.log2(f)
+
+#     return numpy.log2(M) + f.mean()
         
