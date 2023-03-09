@@ -60,3 +60,47 @@ def HV57_Bufton_profile(N, w=21, A=1.7e-14, vg=8, vt=30, ht=9400., Lt=4800.):
 
     h, cn2, w = equivalent_layers(h0, cn20, N, w=w0)
     return h, cn2, w
+
+
+def equivalent_layers(h, p, L, w=None):
+    '''
+    STOLEN FROM AOTOOLS (https://github.com/AOtools/aotools/blob/main/aotools/turbulence/profile_compression.py)
+    SINCE THIS FUNCTION IS NOT CURRENTLY IN LATEST AOTOOLS RELEASE 1.0.7
+
+    Equivalent layers method of profile compression (Fusco 1999).
+    Splits the profile into L "slabs", then sets the height of each slab as the 
+    effective height ((integral cn2(h) * h^{5/3} dh) / integral cn2(h) dh)^(3/5)
+    and the cn2 as the sum of cn2 in that slab.
+    Can also provide wind speed per layer, in which case the wind speeds are calculated 
+    per layer in a similar fashion ((integral cn2(h) * w^{5/3} dh) / integral cn2(h) dh)^(3/5)
+    for wind speed w. This conserves coherence time as well as isoplanatic angle.
+    Parameters
+        h (numpy.ndarray): heights of input profile layers
+        p (numpy.ndarray): cn2dh values of input profile layers
+        L (int): number of layers to compress down to
+        w (numpy.ndarray, optional): wind speeds of input profile layers
+    
+    Returns
+        h_L (numpy.ndarray): compressed profile heights
+        cn2_L (numpy.ndarray): compressed profile cn2dh per layer 
+        w (numpy.ndarray, optional): compressed profile wind speed per layer
+    '''
+    h_el = numpy.zeros(L)
+    cn2_el = numpy.zeros(L)
+    if w is not None:
+        w_el = numpy.zeros(L)
+
+    hstep = (h.max()-h.min())/L
+    alt_bins = numpy.arange(h.min(), h.max(), hstep)
+    ix = numpy.digitize(h, alt_bins)
+    for i in range(L):
+        ix_tmp = ix==i+1
+        cn2_el[i] = p[ix_tmp].sum()
+        h_el[i] = ((p[ix_tmp] * h[ix_tmp]**(5/3)).sum() / p[ix_tmp].sum())**(3/5)
+        if w is not None:
+            w_el[i] = ((p[ix_tmp] * w[ix_tmp]**(5/3)).sum() / p[ix_tmp].sum())**(3/5)
+
+    if w is not None:
+        return h_el, cn2_el, w_el
+
+    return h_el, cn2_el
