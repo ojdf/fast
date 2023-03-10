@@ -295,7 +295,12 @@ class Fast():
         return self.pupil
 
     def init_fftw(self):
-        s = (self.Niter_per_chunk, *self.powerspec.shape)
+
+        size = self.Niter_per_chunk
+        if not self.temporal:
+            size //= 2
+        s = (size, *self.powerspec.shape)
+
         self.fftw_objs = {}
         self.fftw_objs['IN'] = pyfftw.empty_aligned(s, dtype='complex128')
         self.fftw_objs['OUT'] = pyfftw.empty_aligned(s, dtype='complex128')
