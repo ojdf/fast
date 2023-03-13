@@ -595,9 +595,9 @@ class Fast():
         hdr['ALIAS'] = str(params['ALIAS'])
         hdr['NOISE'] = params['NOISE']
         hdr['D_GND'] = params['D_GROUND']
-        hdr['OBSC_GND'] = params['Tx_obsc']
+        hdr['OBSC_GND'] = params['OBSC_GROUND']
         hdr['D_SAT'] = params['D_SAT']
-        hdr['OBSC_SAT'] = params['obsc_sat']
+        hdr['OBSC_SAT'] = params['OBSC_SAT']
         hdr['AXICON'] = str(params['AXICON'])
         hdr['L_SAT'] = params['L_SAT']
         hdr['DX'] = self.dx
