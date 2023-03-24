@@ -606,6 +606,7 @@ class Fast():
         hdr['R0'] = self.r0
         hdr['THETA0'] = self.theta0
         hdr['TAU0'] = self.tau0
+        hdr["DIFFLIM"] = self.diffraction_limit
         return hdr
 
     def save(self, fname, **kwargs):
