@@ -131,6 +131,10 @@ class Fast():
             dx_r0 = self.r0_los / 2
             dx_pupil = self.D_ground / 10
             self.dx = numpy.min([dx_subap, dx_r0, dx_pupil])
+
+            if self.params['AO_MODE'] == 'NOAO':
+                # Set the number of pixels to be based on turbulence only
+                self.dx = self.r0_los / 2
         else:
             self.dx = self.params['DX']
         
@@ -149,6 +153,10 @@ class Fast():
             ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2))
 
             self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
+
+            if self.params['AO_MODE'] == 'NOAO':
+                # Choose number of pixels so that the phase screen is 2x outer scale
+                self.Npxls = int(2 * numpy.ceil((self.params['L0'] * 2) / self.dx) / 2)
         else:
             self.Npxls = self.params['NPXLS']
 
@@ -167,7 +175,7 @@ class Fast():
         self.zenith_correction = self.calc_zenith_correction(self.params['ZENITH_ANGLE'])
         self.h = self.params['H_TURB'] * self.zenith_correction
         self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
-        self.L = self.params['L_SAT']
+        self.L = self.l_path(self.params['H_SAT'], self.params['ZENITH_ANGLE'])
         self.wind_speed = self.params['WIND_SPD']
         self.wind_dir = self.params['WIND_DIR']
         self.dtheta = self.params['DTHETA']
@@ -577,6 +585,20 @@ class Fast():
         gamma = 1/numpy.cos(zenith_angle_rads)
         return gamma
 
+    # Geometrical path length to satellite
+    def l_path(self, h_sat, zeta):
+        r_earth = 6.371009e6
+        zeta =  numpy.radians(zeta)
+        a = 1
+        b = -2 * r_earth * numpy.cos(numpy.pi - zeta)
+        c = r_earth ** 2 - (r_earth + h_sat) ** 2
+        r1 = (-b + numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+        r2 = (-b - numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+        if r1 >= 0:
+            return r1
+        else:
+            return r2
+
     def make_header(self, params):
         hdr = fits.Header()
         hdr['ZENITH'] = params['ZENITH_ANGLE']
@@ -599,7 +621,7 @@ class Fast():
         hdr['D_SAT'] = params['D_SAT']
         hdr['OBSC_SAT'] = params['OBSC_SAT']
         hdr['AXICON'] = str(params['AXICON'])
-        hdr['L_SAT'] = params['L_SAT']
+        hdr['H_SAT'] = params['H_SAT']
         hdr['DX'] = self.dx
         hdr['NPXLS'] = self.Npxls
         hdr['NITER'] = self.Niter
