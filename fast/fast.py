@@ -119,9 +119,10 @@ class Fast():
             self.compute_phs_logamp()
             I[i] = self.compute_detector()
 
-        self.I = I.flatten()
+        self.result = FastResult(I.flatten(), self.diffraction_limit)
+        self.I = self.result.power # backwards compatibility
 
-        return self.I
+        return self.result
 
     def init_frequency_grid(self):
         if self.params['DX'] == 'auto':
@@ -492,10 +493,10 @@ class Fast():
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
         
-        self.I = numpy.exp(self.logamp) * phase_component
+        self.random_iters = numpy.exp(self.logamp) * phase_component
         normalisation = pupil.sum() * self.dx**2
 
-        self.I /= normalisation
+        self.random_iters /= normalisation
             
         # if self.params['PROP_DIR'] == 'up':
         #     # Far field intensity
@@ -504,9 +505,9 @@ class Fast():
 
         if not self.params['COHERENT']:
             # incoherent detection (intensity)
-            self.I = numpy.abs(self.I)**2
+            self.random_iters = numpy.abs(self.random_iters)**2
 
-        return self.I
+        return self.random_iters
 
     def compute_link_budget(self):
         '''
@@ -629,7 +630,7 @@ class Fast():
 
     def save(self, fname, **kwargs):
         hdr = self.make_header(self.params) 
-        fits.writeto(fname, self.I, header=hdr, **kwargs)
+        fits.writeto(fname, self.result.power, header=hdr, **kwargs)
 
 class SpatialFrequencies():
 
@@ -741,3 +742,30 @@ class SpatialFrequencyStruct():
         dx = 2 * numpy.pi / (Nx * self.dfx)
         dy = 2 * numpy.pi / (Ny * self.dfy)
         return dx, dy
+    
+
+class FastResult():
+    '''
+    Allows rapid conversion between useful units for FAST results without having 
+    to do all the conversions unless you need to.
+
+    Attributes: 
+        dB_rel: results in dB relative to diffraction limit (no turbulence)
+        dB_abs: results in dB including all terms in link budget (i.e. received power/launched power)
+        power: results in received power, units of Watts
+    '''
+    def __init__(self, random_iters, diffraction_limit):
+        self._r = random_iters
+        self._dl = diffraction_limit
+    
+    @property
+    def dB_rel(self):
+        return 10*numpy.log10(self._r)
+    
+    @property 
+    def dB_abs(self):
+        return 10*numpy.log10(self._r * self._dl)
+
+    @property
+    def power(self):
+        return self._dl * self._r

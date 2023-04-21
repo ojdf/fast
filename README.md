@@ -40,6 +40,6 @@ p = {your config}
 sim = fast.Fast(p)
 ```
 ## Running the simulation 
-The simulation is run by calling the `run()` function on the sim object. This will compute the phase screens and log-amplitude values, and then compute the detected power or phase/amplitude for coherent detection. The results are stored in `sim.I` and are also returned from `run()`, i.e. `I = sim.run()`.
+The simulation is run by calling the `run()` function on the sim object. This will compute the phase screens and log-amplitude values, and then compute the detected power or phase/amplitude for coherent detection. The results are stored in `sim.results` and are also returned from `run()`, i.e. `res = sim.run()`. Results in either dB or power units can be obtained from e.g. `sim.results.dB_rel` (for dB relative to the diffraction limit) or `sim.results.power`. See the documentation for more details.
 
 To save the simulation results as a fits file with header information, use `sim.save(filename)`.
