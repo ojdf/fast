@@ -65,6 +65,8 @@ DEFAULTS = {'NPXLS': 'auto',
             'NCHUNKS': 10,
             'TEMPORAL': False,
             'DT': 0.001,
+            'LOGFILE': None,
+            'LOGLEVEL': "INFO"
 
             'W0': 0.3,               
             'D_GROUND': 1.0,   

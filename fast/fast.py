@@ -5,6 +5,7 @@ from . import conf
 from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime, fouriertransform
 from astropy.io import fits
 from tqdm import tqdm
+import logging
 
 try:
     import pyfftw
@@ -89,6 +90,7 @@ class Fast():
         if not (self.Niter_per_chunk % 2 == 0):
             raise Exception('NITER/NCHUNKS must be even number')
 
+        self.init_logging()
         self.init_atmos()
         self.init_beam_params()
         self.init_frequency_grid()
@@ -102,7 +104,7 @@ class Fast():
         self.fftw_objs = None
         if self.fftw:
             if not _pyfftw:
-                print('WARNING: fftw flag set but no pyfftw found, defaulting to no fftw')
+                logging.warning('fftw flag set but no pyfftw found, defaulting to no fftw')
                 self.fftw = False
             else:
                 # Create fftw objects for later
@@ -116,14 +118,22 @@ class Fast():
             I = numpy.zeros((self.Nchunks, self.Niter_per_chunk))
 
         for i in tqdm(range(self.Nchunks)):
+            logging.debug(f"Compute phase and log-amplitude for chunk {i+1}")
             self.compute_phs_logamp()
+            logging.debug(f"Compute detector for chunk {i+1}")
             I[i] = self.compute_detector()
 
         self.I = I.flatten()
 
         return self.I
 
+    def init_logging(self):
+        logging.basicConfig(filename=self.params['LOGFILE'], level=logging.getLevelName(self.params['LOGLEVEL']))
+
     def init_frequency_grid(self):
+
+        logging.info("Initialising spatial frequencies")
+
         if self.params['DX'] == 'auto':
             # Nyquist sample either WFS subap or r0, or ensure 10 pixels 
             # across pupil (required for very small launched beams)
@@ -135,6 +145,8 @@ class Fast():
             if self.params['AO_MODE'] == 'NOAO':
                 # Set the number of pixels to be based on turbulence only
                 self.dx = self.r0_los / 2
+
+            logging.info(f"Auto set DX to {self.dx}")
         else:
             self.dx = self.params['DX']
         
@@ -160,6 +172,8 @@ class Fast():
 
             self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, L0_Npxls])
 
+            logging.info(f"Auto set NPXLS to {self.Npxls}")
+
         else:
             self.Npxls = self.params['NPXLS']
 
@@ -175,6 +189,9 @@ class Fast():
                 self.wind_speed, self.wind_dir, self.dt)
 
     def init_atmos(self):
+
+        logging.info("Initialising atmosphere")
+
         self.zenith_correction = self.calc_zenith_correction(self.params['ZENITH_ANGLE'])
         self.h = self.params['H_TURB'] * self.zenith_correction
         self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
@@ -207,6 +224,9 @@ class Fast():
         self.l0 = self.params['l0']
 
     def init_beam_params(self):
+
+        logging.info("Initialising beam parameters")
+
         self.power = self.params['POWER']
         self.W0 = self.params['W0']
         self.F0 = numpy.inf # hard-coded, always launch collimated beam
@@ -223,6 +243,9 @@ class Fast():
         self.obsc_sat = self.params['OBSC_SAT']
 
     def init_ao_params(self):
+
+        logging.info("Initialising AO parameters")
+
         self.ao_mode = self.params['AO_MODE']
         self.Dsubap = self.params['DSUBAP']
         self.tloop = self.params['TLOOP']
@@ -255,6 +278,8 @@ class Fast():
                     D=self.D_ground)
 
     def init_pupil_mask(self):
+
+        logging.info("Initialising pupil mask")
 
         # NOTE setting satellite pupil sampling to be fixed 32 pixels here, should 
         # probably change this 
@@ -313,6 +338,8 @@ class Fast():
 
     def init_fftw(self):
 
+        logging.info("Initialising FFTW")
+
         size = self.Niter_per_chunk
         if not self.temporal:
             size //= 2
@@ -329,10 +356,13 @@ class Fast():
                                             threads=self.nthreads) 
 
     def init_phs_logamp(self):
+        logging.info("Initialising phase and log-amplitude arrays")
         self.phs = numpy.zeros((self.Niter_per_chunk, self.Npxls, self.Npxls))
         self.logamp = numpy.zeros((self.Niter_per_chunk))
 
     def compute_powerspec(self):
+        logging.info("Computing (residual) phase power spectra")
+
         self.turb_powerspec = funcs.turb_powerspectrum_vonKarman(
             self.freq.main, self.cn2, self.L0, self.l0)
 
@@ -371,6 +401,8 @@ class Fast():
         self.fitting_error = funcs.integrate_powerspectrum(self.powerspec * self.hf_mask, self.freq.main.f)
         self.phs_var = funcs.integrate_powerspectrum(self.powerspec, self.freq.main.f)
         self.phs_var_weights = funcs.integrate_powerspectrum(self.powerspec_per_layer, self.freq.main.f) / self.phs_var
+
+        logging.info("Computing (residual) phase power spectra")
 
         # Log-amplitude powerspectrum
         self.logamp_powerspec = ao_power_spectra.logamp_powerspec(self.freq.main, 
@@ -522,6 +554,7 @@ class Fast():
             turbulence effects on the coupling)
     
         '''
+        logging.info("Computing analytical link budget")
 
         if self.params['PROP_DIR'] == "up":
             D_t = self.D_ground
@@ -571,6 +604,7 @@ class Fast():
         '''
         FAST method using Fourier model (no Monte Carlo element)
         '''
+        logging.info("Computing mean irradiance/coupled flux")
 
         pupil = self.pupil * self.fibre_efield
 
@@ -595,6 +629,8 @@ class Fast():
         return gamma
 
     def make_header(self, params):
+        logging.info("Making FITS header")
+
         hdr = fits.Header()
         hdr['ZENITH'] = params['ZENITH_ANGLE']
         hdr['WVL'] = int(params['WVL']*1e9)
@@ -628,6 +664,7 @@ class Fast():
         return hdr
 
     def save(self, fname, **kwargs):
+        logging.info(f"Saving results to {fname}")
         hdr = self.make_header(self.params) 
         fits.writeto(fname, self.I, header=hdr, **kwargs)
 
