@@ -88,6 +88,7 @@ DEFAULTS = {'NPXLS': 'auto',
             'PROP_DIR': 'up',
             'DTHETA': [4,0],    
             'TRANSMISSION': 1,
+            'SLEW_RATE': [0,0],
 
             'AO_MODE': 'AO',
             'DSUBAP': 0.02,

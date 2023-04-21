@@ -44,6 +44,7 @@ p = {
 'PROP_DIR': 'up',                           # Uplink ('up') or downlink ('down') propagation
 'DTHETA': [4,0],                            # Point ahead (x,y) [arcseconds]
 'TRANSMISSION': 1,                          # Atmospheric transmission coefficient
+'SLEW_RATE': [0,0],                         # Slew rate of telescope when tracking [deg/s]
 
 # Adaptive Optics parameters
 'AO_MODE': 'AO',                            # AO mode (full AO 'AO', tip-tilt only 'TT', lgs-AO 'LGSAO', no AO 'NOAO')

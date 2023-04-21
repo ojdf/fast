@@ -193,6 +193,14 @@ class Fast():
             numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
                          numpy.sin(numpy.radians(self.wind_dir))])).T
 
+        # add slew rate to wind speed for LEO tracking
+        if (numpy.array(self.params['SLEW_RATE'])>0).any():
+            wx = self.h * numpy.tan(numpy.radians(self.params['SLEW_RATE'][0]))
+            wy = self.h * numpy.tan(numpy.radians(self.params['SLEW_RATE'][1]))
+            self.wind_vector[:,0] += wx
+            self.wind_vector[:,1] += wy
+            self.wind_speed = numpy.sqrt((self.wind_vector**2).sum(1))
+
         # Atmospheric parameters at zenith, at 500 nm
         self.r0 = cn2_to_r0(self.params['CN2_TURB'].sum(), lamda=500e-9)
         self.theta0 = isoplanaticAngle(self.params['CN2_TURB'], self.params['H_TURB'], lamda=500e-9)
