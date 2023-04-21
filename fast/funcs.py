@@ -380,3 +380,16 @@ def temporal_autocorrelation(I):
 
     return corr[len(Icp)-1:] / len(Icp)
 
+# Geometrical path length to satellite
+def l_path(h_sat, zeta):
+    r_earth = 6.371009e6
+    zeta =  numpy.radians(zeta)
+    a = 1
+    b = -2 * r_earth * numpy.cos(numpy.pi - zeta)
+    c = r_earth ** 2 - (r_earth + h_sat) ** 2
+    r1 = (-b + numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
+    if r1 >= 0:
+        return r1
+    else:
+        return r2

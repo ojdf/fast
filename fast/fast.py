@@ -131,6 +131,10 @@ class Fast():
             dx_r0 = self.r0_los / 2
             dx_pupil = self.D_ground / 10
             self.dx = numpy.min([dx_subap, dx_r0, dx_pupil])
+
+            if self.params['AO_MODE'] == 'NOAO':
+                # Set the number of pixels to be based on turbulence only
+                self.dx = self.r0_los / 2
         else:
             self.dx = self.params['DX']
         
@@ -147,8 +151,15 @@ class Fast():
 
             # Make sure enough pixels so aperture is not clipped!
             ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2))
+            
+            if self.params['AO_MODE'] == 'NOAO' and not numpy.isinf(self.params['L0']):
+                # Choose number of pixels so that the phase screen is 2x outer scale
+                L0_Npxls = int(2 * numpy.ceil((self.params['L0'] * 2) / self.dx) / 2)
+            else:
+                L0_Npxls = 0
 
-            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls])
+            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, L0_Npxls])
+
         else:
             self.Npxls = self.params['NPXLS']
 
@@ -167,7 +178,13 @@ class Fast():
         self.zenith_correction = self.calc_zenith_correction(self.params['ZENITH_ANGLE'])
         self.h = self.params['H_TURB'] * self.zenith_correction
         self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
-        self.L = self.params['L_SAT']
+
+        # If L_SAT is defined, use that otherwise use H_SAT and zenith correct
+        if self.params['L_SAT'] != None:
+            self.L = self.params['L_SAT']
+        else:
+            self.L = funcs.l_path(self.params['H_SAT'], self.params['ZENITH_ANGLE'])
+
         self.wind_speed = self.params['WIND_SPD']
         self.wind_dir = self.params['WIND_DIR']
         self.dtheta = self.params['DTHETA']
@@ -599,7 +616,8 @@ class Fast():
         hdr['D_SAT'] = params['D_SAT']
         hdr['OBSC_SAT'] = params['OBSC_SAT']
         hdr['AXICON'] = str(params['AXICON'])
-        hdr['L_SAT'] = params['L_SAT']
+        hdr['L_SAT'] = self.L
+        hdr['H_SAT'] = params['H_SAT']
         hdr['DX'] = self.dx
         hdr['NPXLS'] = self.Npxls
         hdr['NITER'] = self.Niter

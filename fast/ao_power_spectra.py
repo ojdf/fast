@@ -128,6 +128,9 @@ def mask_lf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=Fal
     else:
         dm_space = wfs_space
 
+    # Make sure there are no mask > 1
+    dm_space = numpy.where(dm_space < 1, dm_space, 1)
+
     mask = wfs_space * dm_space
     return mask
 
