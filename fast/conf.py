@@ -77,6 +77,7 @@ DEFAULTS = {'NPXLS': 'auto',
             'SMF': True,                                
 
             'H_SAT': 36e6,
+            'L_SAT': None,
             'H_TURB': numpy.array([ 0, 10e3]),
             'CN2_TURB': numpy.array([100e-15, 100e-15]),
             'WIND_SPD': numpy.array([ 10, 10]),

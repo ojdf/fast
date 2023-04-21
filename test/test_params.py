@@ -32,7 +32,8 @@ p = {
 'SMF': True,                                # Include losses from coupling into single mode fibre at receiver
 
 # Turbulence and Link parameters
-'H_SAT': 36e6,                              # Altitude of the satellite [m]
+'H_SAT': 36e6,                              # Altitude of the satellite, will be zenith corrected [m]
+'L_SAT': None,                              # Path distance from ground to satellite (overrides H_SAT) [m]
 'H_TURB': h,                                # Turbulence altitudes [m]
 'CN2_TURB': cn2,                            # Cn2dh per turbulence layer [m^1/3]
 'WIND_SPD': w,                              # Wind speed per layer [m/s]
