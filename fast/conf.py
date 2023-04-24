@@ -4,7 +4,7 @@ default values for certain parameters.
 '''
 import importlib.util
 import numpy
-
+import logging
 
 class ConfigParser():
 
@@ -46,7 +46,7 @@ class ConfigParser():
             try:
                 self.config[key]
             except KeyError:
-                print(f"Config parameter {key} not defined in {self.fname}, setting default value of {self.defaults[key]}")
+                logging.warning(f"Config parameter {key} not defined in {self.fname}, setting default value of {self.defaults[key]}")
                 self.config[key] = self.defaults[key]
 
     def set_defaults(self):

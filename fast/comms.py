@@ -6,6 +6,7 @@ from . import Fast
 from scipy.special import erfc 
 from scipy.ndimage import correlate1d
 from scipy.integrate import simps
+import logging
 
 class Modulator():
     '''
@@ -308,7 +309,7 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     if region_size == "full":
         region_size_required = 2*(numpy.mean(numpy.abs(samples))/numpy.sqrt(2) + 2 * numpy.sqrt(N0))
         if region_size_required > decision_region_size_norm:
-            print("AWGN noise level too large for region, increasing region size")
+            logging.debug("AWGN noise level too large for region, increasing region size")
             # npxls = int(numpy.round(npxls * region_size_required / decision_region_size_norm))
             decision_region_size_norm = region_size_required 
 
