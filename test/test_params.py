@@ -19,6 +19,8 @@ p = {
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
 'TEMPORAL': False,                          # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
+'LOGFILE': None,                            # File for logs, if None will log to terminal
+'LOGLEVEL': "INFO",                         # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 # Transmitter/Receiver parameters
 'WVL': 1550e-9,                             # Communications laser wavelength [m]
