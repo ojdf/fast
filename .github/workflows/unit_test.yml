@@ -39,10 +39,9 @@ jobs:
 
     - name: Test with pytest
       run: |
-        cd test
-        coverage run -m pytest tests_pytest.py
+        coverage run -m pytest test/tests_pytest.py
         coverage xml -o .coverage.xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2
       with:
-        files: test/.coverage.xml
+        files: .coverage.xml

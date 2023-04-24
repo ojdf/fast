@@ -29,12 +29,12 @@ def test_HV57_Bufton():
 
 # Test config parsing 
 def test_config_default():
-    c = fast.conf.ConfigParser("test_params.py")
+    c = fast.conf.ConfigParser("test/test_params.py")
 
 
 # Test complete simulation
 def test_sim_default():
-    sim = fast.Fast("test_params.py")
+    sim = fast.Fast("test/test_params.py")
     sim.run()
     global p
     p = sim.params.copy()
