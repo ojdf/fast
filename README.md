@@ -1,6 +1,7 @@
 # FAST (Fourier domain Adaptive optics Simulation Tool)
 
 ![](https://github.com/ojdf/fast/actions/workflows/unit_test.yml/badge.svg)
+[![codecov](https://codecov.io/gh/ojdf/fast/branch/main/graph/badge.svg?token=Z1U8JBPE48)](https://codecov.io/gh/ojdf/fast)
 
 FAST is a simulation tool that utilises a Fourier domain AO model to enable rapid Monte Carlo characterisation of free space optical links between the Earth and satellites. For more details, see the paper [https://doi.org/10.1364/OE.458659](https://doi.org/10.1364/OE.458659).
 
