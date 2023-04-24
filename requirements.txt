@@ -1,0 +1,7 @@
+numpy
+scipy 
+aotools >= 1.0.7
+astropy
+tqdm
+pytest
+coverage
