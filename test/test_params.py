@@ -10,8 +10,8 @@ wdir = [0,90,180,270]
 
 p = {
 # Simulation parameters
-'NPXLS': 'auto',                            # Number of sim pixels (can be "auto") 
-'DX': 'auto',                               # Pixel scale (can be "auto") [m/pixel] 
+'NPXLS': 128,                               # Number of sim pixels (can be "auto") 
+'DX': 0.01,                                 # Pixel scale (can be "auto") [m/pixel] 
 'NITER': 1000,                              # Number of random iterations
 'SUBHARM': True,                            # Include subharmonics
 'FFTW': False,                              # Use pyfftw

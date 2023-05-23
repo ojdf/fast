@@ -8,14 +8,9 @@ FAST is a simulation tool that utilises a Fourier domain AO model to enable rapi
 WARNING: FAST is under active development and the simulation API and configuration is not fixed. If you find a bug, or something is not working as you would expect, please email me or make an issue on GitHub, it's likely I've broken something! 
 
 ## Requirements
-```
-numpy
-scipy 
-aotools
-astropy
-tqdm
-pyfftw (optional)
-```
+See `requirements.txt`
+
+It is recommended to install [pyFFTW](https://pypi.org/project/pyFFTW/) to speed up FFTs. 
 
 ## Installation
 FAST is pure python, so hopefully there is not anything to compile, just ensure that the FAST directory is on your `PYTHONPATH`, or navigate to the directory and run 

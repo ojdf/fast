@@ -601,7 +601,7 @@ class Fast():
 
         return self.link_budget
 
-    def compute_mean_irradiance(self):
+    def compute_mean_irradiance(self, onaxis=True):
         '''
         FAST method using Fourier model (no Monte Carlo element)
         '''
@@ -617,11 +617,14 @@ class Fast():
 
         otf = numpy.exp(-phs_sf) * pupil_otf
 
-        psf = fouriertransform.ft2(otf, self.dx).real
+        if not onaxis:
+            psf = fouriertransform.ft2(otf, self.dx).real
+        else:
+            psf = otf.sum().real * self.dx**2
 
-        if self.params['PROP_DIR'] == 'up':
-            psf /= (self.wvl * self.L)**2
-            
+        normalisation = (pupil.sum() * self.dx**2)**2
+        psf *= self.diffraction_limit / normalisation 
+
         return psf
 
     def calc_zenith_correction(self, zenith_angle):
