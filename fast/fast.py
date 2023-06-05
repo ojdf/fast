@@ -792,11 +792,14 @@ class FastResult():
     Attributes: 
         dB_rel: results in dB relative to diffraction limit (no turbulence)
         dB_abs: results in dB including all terms in link budget (i.e. received power/launched power)
+        dBm: results in dBm, including all terms in link budget
         power: results in received power, units of Watts
     '''
-    def __init__(self, random_iters, diffraction_limit):
+    def __init__(self, random_iters, diffraction_limit, header=None):
         self._r = random_iters
         self._dl = diffraction_limit
+        if header != None:
+            self.hdr = header
     
     @property
     def dB_rel(self):
@@ -805,7 +808,18 @@ class FastResult():
     @property 
     def dB_abs(self):
         return 10*numpy.log10(self._r * self._dl)
+    
+    @property
+    def dBm(self):
+        return 10*numpy.log10(self._r * self._dl / 1e-3)
 
     @property
     def power(self):
         return self._dl * self._r
+
+
+def load(fname):
+    hdr = fits.getheader(fname)
+    data = fits.getdata(fname)
+    data /= hdr['DIFFLIM'] # assume saved in units of power 
+    return FastResult(data, hdr['DIFFLIM'], header=hdr)
