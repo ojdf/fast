@@ -24,7 +24,7 @@ To confirm correct installation, try running
 in the FAST directory, which should run a short simulation. 
 
 ## Configuration
-Config is handled currently by python scripts, an example of which is shown in `demo_params.py`. The config file should define a dictionary `p` which contains all of the configuration information required. If any values are missed, they will be replaced by defaults. 
+Config is handled currently by python scripts, an example of which is shown in `test_params.py`. The config file should define a dictionary `p` which contains all of the configuration information required. If any values are missed, they will be replaced by defaults. 
 
 To start a simulation either in the python shell or in a script, you can either pass the filename of the script defining the config dictionary, or you can provide the dictionary itself, which can be useful if you are scanning through parameters. So
 ```
