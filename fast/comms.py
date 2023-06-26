@@ -6,6 +6,7 @@ from . import Fast
 from scipy.special import erfc 
 from scipy.ndimage import correlate1d
 from scipy.integrate import simps
+from aotools import gaussian2d
 import logging
 
 class Modulator():
@@ -186,16 +187,32 @@ def fade_dur(I, threshold, dt=1, min_fades=30):
     return mn * dt
 
 
-def BER_ook(Is_rand, SNR, bins=None, nbins=100):
+def ber_ook(samples, SNR, bins=None, nbins=100):
+    '''
+    Bit Error Rate for On-Off-Keying communications channel.
+    
+    Numerical integration of Eq. 58 from Andrews and Phillips (2005) Ch 11.
+
+    Args:
+        samples (numpy.ndarray): random samples of received power from FAST
+        SNR (float): receiver signal-to-noise ratio 
+        bins (numpy.ndarray, optional): bins to perform integration. If None then 
+            will make bins based on max/min values of samples and nbins
+        nbins (int, optional): number of bins for integration.
+
+    Returns:
+        Bit error rate
+    '''
+    # Normalise samples by mean 
+    s = samples/samples.mean()
+
     if bins is None:
-        bins = numpy.logspace(numpy.log10(Is_rand.min()), numpy.log10(Is_rand.max()), nbins)
+        bins = numpy.logspace(numpy.log10(s.min()), numpy.log10(s.max()), nbins)
 
-    weights, edges = numpy.histogram(Is_rand, bins=bins, density=True)
-
+    weights, edges = numpy.histogram(s, bins=bins, density=True)
     centres = edges[:-1] + numpy.diff(edges)/2.
 
     integrand = 0.5 * weights * erfc(SNR * centres/(2*numpy.sqrt(2)))
-
     integral = simps(integrand, x=centres)
 
     return integral
@@ -205,7 +222,7 @@ def sep_qam(samples, M, npxls, EsN0, N0=None):
     return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2)).mean()
 
 
-def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None):
+def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None, shot=False):
     '''
     Generalised Mutual Information (GMI), adapted from Alvarado et al (2016) 
     [10.1109/JLT.2015.2450537] and Cho et al (2017) [10.1109/ECOC.2017.8345872].
@@ -226,7 +243,7 @@ def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None):
     Returns:
         GMI (float): the generalised mutual information value, in bits/symbol
     '''
-    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full")
+    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full", shot=shot)
     fy = fyx.mean(0)
     log2_fy = numpy.ma.log2(fy)
 
@@ -245,19 +262,19 @@ def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None):
     return gmi.sum((-1,-2)).mean(1).sum()
 
 
-def mutual_information_qam(samples, M, npxls, EsN0, N0=None):
+def mutual_information_qam(samples, M, npxls, EsN0, N0=None, shot=False):
     '''
     Equation 16 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
 
     This is for a memoryless receiver (no knowledge of other bits transmitted)
     '''
-    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full")
+    fyx = convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="full", shot=shot)
 
     fy = fyx.mean(0)
     return (fyx * (numpy.ma.log2(fyx)-numpy.ma.log2(fy))).sum((-1,-2)).mean()
 
 
-def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"):
+def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual", shot=False):
     '''
     Method of computing received I-Q plane for M-ary QAM under AWGN assumptions
     given a series of complex field measurements. 
@@ -326,22 +343,34 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
 
     out = numpy.zeros((len(constellation), npxls, npxls))
 
+    x = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1)
+    y = x.copy()
+
     for c in range(len(constellation)):
-        x = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1)
-        y = numpy.linspace(-decision_region_size_norm/2,decision_region_size_norm/2,npxls+1)
+        xbin = x.copy()
+        ybin = y.copy()
 
         if region_size == "individual":
-            x += constellation_norm[c].real
-            y += constellation_norm[c].imag
+            xbin += constellation_norm[c].real
+            ybin += constellation_norm[c].imag
 
         samples_norm = constellation[c] * numpy.abs(samples)
-        h = numpy.histogram2d(samples_norm.real, samples_norm.imag, bins=[x,y])[0] / len(samples_norm)
+        h = numpy.histogram2d(samples_norm.real, samples_norm.imag, bins=[xbin,ybin])[0] / len(samples_norm)
 
-        # perform separated 2d gaussian filter
-        h = correlate1d(h, g, mode='constant', axis=0)
-        h = correlate1d(h, g, mode='constant', axis=1)
-
-        out[c] = h
+        if not shot:
+            # perform separated 2d gaussian filter
+            h_conv = correlate1d(h, g, mode='constant', axis=0)
+            h_conv = correlate1d(h_conv, g, mode='constant', axis=1)
+        else:
+            ix, iy = numpy.where(h>0)
+            sigma_mults = numpy.abs(samples).mean()**2 / (xbin[ix]**2 + ybin[iy]**2)
+            h_conv = numpy.zeros(h.shape)
+            for i in range(len(sigma_mults)):
+                h_conv += \
+                    h[ix[i],iy[i]] * \
+                    gaussian2d(h.shape, numpy.sqrt(sigma2*sigma_mults[i]/2), cent=(ix[i], iy[i])) / (numpy.pi * sigma2 * sigma_mults[i])
+                
+        out[c] = h_conv
 
     return out
 
