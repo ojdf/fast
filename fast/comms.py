@@ -11,19 +11,27 @@ import logging
 
 class Modulator():
     '''
-    Takes series of intensities (or coherent field values) and modulates/demodulates 
-    according to a modulation scheme (OOK, BPSK, QPSK, QAM, etc) with random bits. 
+    Takes array of optical powers and modulates/demodulates according to a modulation 
+    scheme (OOK, BPSK, QPSK, QAM, etc) with random bits. Can add AWGN at a given 
+    average signal-to-noise ratio. 
+
     This allows Monte Carlo computation of bit error rate or symbol error probability.  
 
     Parameters:
-        I (numpy.ndarray): Array of intensities/coherent field values 
-        modulation (string): Modulation scheme 
-        N0 (float, optional): Noise variance for AWGN
+        power (numpy.ndarray): array of optical powers
+        modulation (string): modulation scheme 
+        EsN0 (float, optional): (average) symbol signal to noise ratio
+        symbols_per_iter (int, optional): Number of symbols per iteration of FAST. 
+            Defaults to 1000.
     '''
-    def __init__(self, I, modulation, N0=0):
-        self.I = I
+    def __init__(self, power, modulation, EsN0=None, symbols_per_iter=1000):
+        self.power = power / power.mean()
+        self.amplitude = numpy.sqrt(self.power)
         self.modulation = modulation
-        self.N0 = N0
+        self.symbols_per_iter = symbols_per_iter
+        self.EsN0 = EsN0
+        if EsN0 != None:
+            self.snr = numpy.sqrt(10**(EsN0/10)) * self.power
 
     def generate_symbols(self):
 
@@ -39,48 +47,32 @@ class Modulator():
         else:
             raise ValueError("Scheme not recognised")
 
-        self.symbols = numpy.random.randint(0, self.nsymbols, size=len(self.I))
+        self.symbols = numpy.random.randint(0, self.nsymbols, size=(self.symbols_per_iter, len(self.power)))
 
     def modulate(self):
 
         if self.modulation == None:
-            self.recv_signal = self.I
+            self.recv_signal = self.power
             return self.recv_signal
 
         self.generate_symbols()
 
-        if self.N0 > 0:
-            # AWGN (generate complex, if incoherent then take abs)
-            self.awgn = numpy.random.normal(0, self.N0/numpy.sqrt(2), size=len(self.I)) \
-                + 1j * numpy.random.normal(0, self.N0/numpy.sqrt(2), size=len(self.I))
-        else:
-            self.awgn = 0
-    
-        # incoherent on-off keying
-        if self.modulation == "OOK":
-            if self.params['COHERENT']:
-                raise ValueError(f"{self.modulation} modulation requires COHERENT=False")
-
-            self.recv_signal = self.symbols * self.I + numpy.abs(self.awgn)**2
-            self.Es = (self.symbols * self.I).mean()
-            return self.recv_signal
-
-        # coherent schemes
-        if self.I.dtype != complex:
-            raise ValueError(f"{self.modulation} modulation requires COHERENT=True")
-
-        constellation = define_constellation(self.modulation)
-        mod = constellation[self.symbols]
-
-        # Constellation normalised by mean amplitude
-        self.constellation = abs(self.I).mean() * constellation
+        self.constellation = define_constellation(self.modulation)
+        mod = self.constellation[self.symbols]
 
         # calculate average symbol energy Es (useful later)
         self.Es = (numpy.abs(self.constellation)**2).mean()
 
-        # Received signal loses any atmospheric phase aberrations because of 
-        # phase locked loop on reciever?
-        self.recv_signal = mod * abs(self.I) + self.awgn
+        if self.EsN0 != None:
+            if self.modulation == "OOK":
+                self.awgn = numpy.random.normal(0, self.Es/self.snr, size=(self.symbols_per_iter, len(self.power)))
+            else:
+                self.awgn = numpy.random.normal(0, numpy.sqrt(self.Es/2)/self.snr, size=(self.symbols_per_iter,len(self.power))) \
+                    + 1j * numpy.random.normal(0, numpy.sqrt(self.Es/2)/self.snr, size=(self.symbols_per_iter, len(self.power)))
+        else:
+            self.awgn = 0
+
+        self.recv_signal = mod + self.awgn
         
         return self.recv_signal
 
@@ -92,7 +84,7 @@ class Modulator():
         
         # fast ways for OOK and BPSK
         if self.modulation == "OOK":
-            cutoff = 0.5 * self.I.mean()
+            cutoff = 0.5 
             self.recv_symbols = (self.recv_signal > cutoff).astype(int)
 
         elif self.modulation == "BPSK":
@@ -113,7 +105,7 @@ class Modulator():
             self.sep = None
 
         else:
-            self.sep = (self.recv_symbols != self.symbols).sum() / len(self.symbols)
+            self.sep = (self.recv_symbols != self.symbols).mean()
             
         return self.sep
 
@@ -148,16 +140,17 @@ class FastFSOC(Fast):
     def __init__(self, *args, **kwargs):
         super(FastFSOC, self).__init__(*args, **kwargs)
         self.modulation = self.params['MODULATION']
-        self.N0 = self.params['N0']
+        self.EsN0 = self.params['EsN0']
 
     def run(self):
         super(FastFSOC, self).run()
-        self.modulator = Modulator(self.I, self.modulation, self.N0)
+        self.modulator = Modulator(self.result.power, self.modulation, self.EsN0)
         self.modulator.run()
 
     def make_header(self, params):
         hdr = super(FastFSOC, self).make_header(params)
         hdr['MODULATION'] = params['MODULATON']
+        hdr['EsN0'] = self.EsN0
         return hdr
 
 
@@ -167,7 +160,7 @@ def fade_prob(I, threshold, min_fades=30):
         # not enough fades
         return numpy.nan
     else:
-        return (I<threshold).sum()/len(I)
+        return prob
 
 
 def fade_dur(I, threshold, dt=1, min_fades=30):
@@ -180,46 +173,79 @@ def fade_dur(I, threshold, dt=1, min_fades=30):
 
     if len(fades_filt) < min_fades:
         # not enough fades to characterise duration, return nan
-        return numpy.nan, numpy.nan
+        return numpy.nan
 
     fade_durs = [i.sum() for i in fades_filt]
     mn = numpy.mean(fade_durs)
     return mn * dt
 
 
-def ber_ook(samples, SNR, bins=None, nbins=100):
+def ber_ook(EbN0, samples=None):
     '''
     Bit Error Rate for On-Off-Keying communications channel.
     
-    Numerical integration of Eq. 58 from Andrews and Phillips (2005) Ch 11.
+    Monte Carlo integration of Eq. 58 from Andrews and Phillips (2005) Ch 11.
+    Note that electrical SNR per bit (Eb/N0) is used, not OSNR as in A+P.
 
     Args:
-        samples (numpy.ndarray): random samples of received power from FAST
-        SNR (float): receiver signal-to-noise ratio 
-        bins (numpy.ndarray, optional): bins to perform integration. If None then 
-            will make bins based on max/min values of samples and nbins
-        nbins (int, optional): number of bins for integration.
+        EbN0 (float): average signal-to-noise ratio per bit Eb/N0 in electrical domain, dB
+        samples (numpy.ndarray, optional): random samples of received power from FAST. 
+            If None is provided, assume no atmosphere (i.e. intensity pdf = delta function)
 
     Returns:
-        Bit error rate
+        Bit error rate for OOK
     '''
+    snr = numpy.sqrt(10**(EbN0/10))
+
+    if samples is None:
+        # return BER assuming no atmospheric spreading
+        return Q(snr)
+    
     # Normalise samples by mean 
     s = samples/samples.mean()
 
-    if bins is None:
-        bins = numpy.logspace(numpy.log10(s.min()), numpy.log10(s.max()), nbins)
-
-    weights, edges = numpy.histogram(s, bins=bins, density=True)
-    centres = edges[:-1] + numpy.diff(edges)/2.
-
-    integrand = 0.5 * weights * erfc(SNR * centres/(2*numpy.sqrt(2)))
-    integral = simps(integrand, x=centres)
-
-    return integral
+    return Q(s * snr).mean()
 
 
-def sep_qam(samples, M, npxls, EsN0, N0=None):
-    return 1-convolve_awgn_qam(samples, M, npxls, EsN0, N0=N0, region_size="individual").sum((-1,-2)).mean()
+def sep_qam(M, EsN0, samples=None):
+    '''
+    Symbol error probabilty for square M-ary QAM, from Rice. 
+
+    Parameters:
+        M (int): Number of symbols (must be perfect square)
+        EsN0 (float): Average electrical symbol signal-to-noise ratio [dB]
+        samples (numpy.ndarray, optional): random samples of received power from FAST. 
+    '''
+    EsN0_frac = 10**(EsN0/10)
+    prefactor = (numpy.sqrt(M)-1)/numpy.sqrt(M)
+
+    if samples is None:
+        return 4*(prefactor*Q(numpy.sqrt(3/(M-1) * EsN0_frac)) - prefactor**2 * Q(numpy.sqrt(3/(M-1) * EsN0_frac))**2)
+    
+    s = samples / samples.mean()
+    EsN0_frac *= s**2
+
+    return 4*(prefactor*Q(numpy.sqrt(3/(M-1) * EsN0_frac)) - prefactor**2 * Q(numpy.sqrt(3/(M-1) * EsN0_frac))**2).mean()
+
+
+def ber_qam(M, EbN0, samples=None):
+    '''
+    Bit error rate for square M-ary QAM, from Rice. Assumes only nearest neighbour 
+    bit errors and Gray coding, i.e. 1 bit error per symbol error.
+
+    Parameters:
+        M (int): Number of symbols (must be perfect square)
+        EbN0 (float): Average electrical signal-to-noise ratio per bit [dB]
+        samples (numpy.ndarray, optional): random samples of received power from FAST. 
+    '''
+    return 1/numpy.log2(M) * sep_qam(M, 10*numpy.log10(numpy.log2(M)) + EbN0, samples)
+
+
+def Q(x):
+    '''
+    Q function from Rice book
+    '''
+    return 1/2 * erfc(x/numpy.sqrt(2))
 
 
 def generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None, shot=False):
@@ -379,6 +405,7 @@ def define_constellation(modulation):
     '''
     Define constellations for coherent modulation schemes. Schemes supported:
 
+    OOK - On-Off Keying
     BPSK - Binary Phase Shift Keying
     QPSK - Quadrature Phase Shift Keying 
     QAM - Quadrature Amplitude Modulation 
@@ -393,8 +420,12 @@ def define_constellation(modulation):
             of dimension (nsymbols), real and imaginary parts correspond to the
             two axes of the modulation.
     '''
+    if modulation == "OOK":
+        nsymbols = 2
+        constellation = numpy.array([0,1])
+
     # coherent schemes
-    if modulation == "BPSK":
+    elif modulation == "BPSK":
         # binary phase shift keying
         nsymbols = 2
         constellation = numpy.exp(1j * numpy.arange(nsymbols) * numpy.pi)
@@ -464,54 +495,3 @@ def _bit_at_index(code, index, bit):
 
     return out
 
-
-def Q(x):
-    '''
-    Q function from Rice book
-    '''
-    return 1/2 * erfc(x/numpy.sqrt(2))
-
-
-def sep_qam_analytic(M, EsN0):
-    '''
-    Symbol error probabilty for square M-ary QAM, from Rice
-
-    Parameters:
-        M (int): Number of symbols (must be perfect square)
-        EsN0 (float): Symbol signal-to-noise ratio [dB]
-    '''
-    EsN0_frac = 10**(EsN0/10)
-    return 4*(numpy.sqrt(M)-1)/numpy.sqrt(M) * Q(numpy.sqrt(3/(M-1) * EsN0_frac) )
-
-
-def bep_qam_analytic(M, EbN0):
-    '''
-    Bit error probability (rate) for square M-ary QAM, from Rice
-
-    Parameters:
-        M (int): Number of symbols (must be perfect square)
-        EbN0 (float): Bit signal-to-noise ratio [dB]
-    '''
-    return 1/numpy.log2(M) * sep_qam(M, 10*numpy.log10(numpy.log2(M)) + EbN0)
-
-
-# def mutual_information_awgn_analytic(M, EsN0, nrand=10000):
-#     '''
-#     Eq. 28 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
-#     '''
-#     constellation = define_constellation(f"{M}-QAM")
-#     Es = numpy.mean(numpy.abs(constellation)**2)
-#     EsN0_linear = 10**(EsN0/10)
-#     N0 = Es / EsN0_linear
-#     r = numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand) + 1j *numpy.random.normal(0,N0/numpy.sqrt(2),size=nrand)
-#     rabs = numpy.abs(r)**2
-#     snr_linear = Es / (N0 * numpy.pi/2)
-
-#     f = [[numpy.exp(-snr_linear * (2*(numpy.conjugate(xi - xj) * r).real + rabs))
-#             for xi in constellation] for xj in constellation]
-
-#     f = numpy.array(f).sum(0)
-#     f = numpy.log2(f)
-
-#     return numpy.log2(M) + f.mean()
-        

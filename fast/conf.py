@@ -103,5 +103,5 @@ DEFAULTS = {'NPXLS': 'auto',
 
             'COHERENT': False,
             'MODULATION': None, 
-            'N0': 0}
+            'EsN0': None}
 

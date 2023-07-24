@@ -61,6 +61,6 @@ p = {
 # Communications parameters
 'COHERENT': False,                          # Coherent detection 
 'MODULATION': None,                         # Comms modulation scheme
-'N0': 0,                                    # Detector noise [W], for AWGN
+'EsN0': None,                               # Reciever electrical SNR per symbol [dB]
 
 }
