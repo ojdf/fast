@@ -196,6 +196,7 @@ class Fast():
         self.zenith_correction = self.calc_zenith_correction(self.params['ZENITH_ANGLE'])
         self.h = self.params['H_TURB'] * self.zenith_correction
         self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
+        self.boiling = self.params['BOILING']
 
         # If L_SAT is defined, use that otherwise use H_SAT and zenith correct
         if self.params['L_SAT'] != None:
@@ -512,7 +513,7 @@ class Fast():
         self.phs[:] = funcs.make_phase_fft(
             self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
             self.dx, self.fftw, self.fftw_objs, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
-            self.phs_var_weights, self.phs_var_weights_sh)
+            self.phs_var_weights, self.phs_var_weights_sh, self.boiling)
 
         self.logamp[:] = \
             funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real

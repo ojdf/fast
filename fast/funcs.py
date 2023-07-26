@@ -199,7 +199,7 @@ def pdf_lognorm(Is, sigma, Imn=1):
 
 def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
                     fftw=False, fftw_objs=None, temporal=False, temporal_powerspec=None, shifts=None, 
-                    shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None):
+                    shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None, boiling=1):
 
     df = freq.df
 
@@ -210,7 +210,7 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
 
     rand = generate_random_coefficients(Nscrns, powerspec, 
                 temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts,
-                weights=phs_var_weights)
+                weights=phs_var_weights, alpha=boiling)
 
     if fftw:
         fftw_objs['IN'][:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
@@ -252,7 +252,7 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
             powerspec_lo[1,1] = 0
 
             rand_lo = generate_random_coefficients(Nscrns, powerspec_lo,
-                        temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts_lo, weights=weights_lo) \
+                        temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts_lo, weights=weights_lo, alpha=boiling) \
                             * df_lo
 
             modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
@@ -337,7 +337,7 @@ def coupling_loss(W, N, pupil, dx):
     coupling = numpy.abs((fibre_field * pupil).sum() * dx**2)**2
     return 1 - coupling
 
-def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None, shifts=None, weights=None):
+def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None, shifts=None, weights=None, alpha=1):
 
     if not temporal:
 
@@ -356,7 +356,23 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
 
             r = (r.T * numpy.sqrt(weights)).T
 
-            rand = (r * shifts).sum(1)
+            if alpha < 1:
+
+                rand = numpy.empty(shifts.shape, dtype=complex)
+                rand[0] = r
+                dshift = shifts[1]
+                omega = numpy.random.normal(0,1,size=shifts.shape) \
+                        + 1j * numpy.random.normal(0,1,size=shifts.shape)
+                omega = (omega.swapaxes(1,-1) * numpy.sqrt(weights)).swapaxes(1,-1) * numpy.sqrt(1-alpha**2)
+                for i in range(rand.shape[0]-1):
+                    rand[i+1] = rand[i] * alpha * dshift + omega[i]
+
+                rand = rand.sum(1)
+
+            else:
+
+                rand = (r * shifts).sum(1)
+                
 
             return rand * numpy.sqrt(powerspec)
 

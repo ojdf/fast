@@ -90,6 +90,7 @@ DEFAULTS = {'NPXLS': 'auto',
             'PROP_DIR': 'up',
             'DTHETA': [4,0],    
             'TRANSMISSION': 1,
+            'BOILING': 1,
 
             'AO_MODE': 'AO',
             'DSUBAP': 0.02,

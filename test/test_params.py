@@ -46,6 +46,7 @@ p = {
 'PROP_DIR': 'up',                           # Uplink ('up') or downlink ('down') propagation
 'DTHETA': [4,0],                            # Point ahead (x,y) [arcseconds]
 'TRANSMISSION': 1,                          # Atmospheric transmission coefficient
+'BOILING': 1,                               # Turbulence boiling parameter (1 = no boiling, 0 = completely random phase)
 
 # Adaptive Optics parameters
 'AO_MODE': 'AO',                            # AO mode (full AO 'AO', tip-tilt only 'TT', lgs-AO 'LGSAO', no AO 'NOAO')
