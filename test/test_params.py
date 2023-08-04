@@ -19,13 +19,13 @@ p = {
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
 'TEMPORAL': False,                          # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
-'LOGFILE': None,                            # File for logs, if None will log to terminal
+'LOGFILE': None,                            # File for logs, if None will log to stdout
 'LOGLEVEL': "INFO",                         # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 # Transmitter/Receiver parameters
 'WVL': 1550e-9,                             # Communications laser wavelength [m]
 'POWER': 1,                                 # Transmitted laser power [W]
-'W0': 0.3,                                  # 1/e^2 Tx beam radius (satellite/ground depending on PROP_DIR) [m]
+'W0': "opt",                                # 1/e^2 Tx beam radius (satellite/ground depending on PROP_DIR), set to "opt" to optimise automatically [m]
 'D_GROUND': 0.8,                            # Diameter of circular ground station aperture [m]
 'OBSC_GROUND': 0,                           # Diameter of central obscuration of ground aperture [m]
 'D_SAT': 0.1,                               # Diameter of circular satellite aperture [m] [!NOT USED!]

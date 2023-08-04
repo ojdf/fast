@@ -6,12 +6,15 @@ from scipy.ndimage import rotate
 from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
+import logging
 
 try:
     import pyfftw
     _pyfftw = True
 except ImportError:
     _pyfftw = False
+
+logger = logging.getLogger(__name__)
 
 def f_grid_linear(L0, l0, max_size=1024):
     '''
@@ -289,10 +292,17 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
         return circ_ap / numpy.sqrt(circ_ap.sum()*dx**2)
 
     elif ptype == 'gauss':
-        I0 = 2 / (numpy.pi * W0**2)
-        return gaussian2d(N, W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
+        if W0 == "opt":
+            g, opt = optimize_fibre(circ_ap, dx, return_size=True)
+            logger.debug(f"Optimised gaussian size: {opt}")
+            return g * circ_ap
+        else:
+            I0 = 2 / (numpy.pi * W0**2)
+            return gaussian2d(N, W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
 
     elif ptype == 'axicon':
+        if W0 == "opt":
+            raise TypeError("Using 'axicon' and W0='opt' not supported, please set a value for W0")
         x = numpy.arange(-N/2, N/2, 1) * dx
         xx, yy = numpy.meshgrid(x,x)
         r = numpy.sqrt(xx**2 + yy**2)
@@ -316,7 +326,7 @@ def pupil_filter(freq, pupil, spline=False):
     else:
         return P
 
-def optimize_fibre(pupil, dx, size_min=None, size_max=None):
+def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
     N = pupil.shape[-1]
 
     if size_max is None:
@@ -330,7 +340,12 @@ def optimize_fibre(pupil, dx, size_min=None, size_max=None):
 
     opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
     
-    return gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
+    g = gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
+
+    if return_size:
+        return g, opt
+    else:
+        return g
 
 def coupling_loss(W, N, pupil, dx):
     fibre_field = gaussian2d(N, W/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi*W**2))

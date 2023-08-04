@@ -9,6 +9,8 @@ from scipy.integrate import simps
 from aotools import gaussian2d
 import logging
 
+logger = logging.getLogger(__name__)
+
 class Modulator():
     '''
     Takes array of optical powers and modulates/demodulates according to a modulation 
@@ -352,7 +354,7 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     if region_size == "full":
         region_size_required = 2*(numpy.mean(numpy.abs(samples))/numpy.sqrt(2) + 2 * numpy.sqrt(N0))
         if region_size_required > decision_region_size_norm:
-            logging.debug("AWGN noise level too large for region, increasing region size")
+            logger.debug("AWGN noise level too large for region, increasing region size")
             # npxls = int(numpy.round(npxls * region_size_required / decision_region_size_norm))
             decision_region_size_norm = region_size_required 
 

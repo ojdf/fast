@@ -6,6 +6,8 @@ import importlib.util
 import numpy
 import logging
 
+logger = logging.getLogger(__name__)
+
 class ConfigParser():
 
     def __init__(self, fname):
@@ -46,7 +48,7 @@ class ConfigParser():
             try:
                 self.config[key]
             except KeyError:
-                logging.warning(f"Config parameter {key} not defined in {self.fname}, setting default value of {self.defaults[key]}")
+                logger.warning(f"Config parameter {key} not defined in {self.fname}, setting default value of {self.defaults[key]}")
                 self.config[key] = self.defaults[key]
 
     def set_defaults(self):
@@ -68,7 +70,7 @@ DEFAULTS = {'NPXLS': 'auto',
             'LOGFILE': None,
             'LOGLEVEL': "INFO",
 
-            'W0': 0.3,               
+            'W0': "opt",               
             'D_GROUND': 1.0,   
             'OBSC_GROUND': 0,   
             'D_SAT': 0.1,                           

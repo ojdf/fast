@@ -65,6 +65,7 @@ def test_sim_obsc_sat():
 
 def test_sim_axicon():
     ptmp = p.copy()
+    ptmp['W0'] = 0.1
     ptmp['AXICON'] = True
     ptmp['OBSC_GROUND'] = 0.1
     run_sim(ptmp)
