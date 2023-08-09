@@ -13,7 +13,6 @@ try:
 except ImportError:
     _pyfftw = False
 
-logging.captureWarnings(True)
 logger = logging.getLogger(__name__)
 
 

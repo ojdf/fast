@@ -7,6 +7,7 @@ from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
 import logging
+import warnings
 
 try:
     import pyfftw
@@ -147,17 +148,20 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     fabs = freq.fabs
     km = 5.92 / l0
     k0 = C / L0
-    try:
-        nlayers = len(cn2)
-        cn2 = numpy.array(cn2)
-        if freq.freq_per_layer:
-            # we have a 3d fabs array already, with an entry for each layer
-            power_spec = ((0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)).T * cn2).T
-        else:
-            power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T 
-    except TypeError:
-        # cn2 is a single float value
-        power_spec = numpy.array([0.033 * cn2 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.) ])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
+        
+        try:
+            nlayers = len(cn2)
+            cn2 = numpy.array(cn2)
+            if freq.freq_per_layer:
+                # we have a 3d fabs array already, with an entry for each layer
+                power_spec = ((0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)).T * cn2).T
+            else:
+                power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T 
+        except TypeError:
+            # cn2 is a single float value
+            power_spec = numpy.array([0.033 * cn2 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.) ])
 
     # Set any infinite values to 0
     power_spec[numpy.isinf(power_spec)] = 0.

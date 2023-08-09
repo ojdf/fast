@@ -4,6 +4,7 @@ from . import funcs
 from aotools.functions.zernike import zernIndex
 from aotools import cn2_to_r0, fouriertransform
 from scipy.interpolate import RectBivariateSpline
+import warnings
 from . import fast
 
 def zernike_ft(fabs, phi, D, n_noll):
@@ -181,28 +182,31 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
     sinc_term = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))**2
 
     #TODO: the central pixel may still be wrong
-    for l in ls:
-        for k in ks:
-            if l == 0 and k == 0:
-                continue
+    with warnings.catch_warnings(): 
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
+        
+        for l in ls:
+            for k in ks:
+                if l == 0 and k == 0:
+                    continue
 
-            # Quick and dirty SpatialFrequencyStruct here, probably not optimal
-            fx_shift = freq.fx_axis - 2*numpy.pi * k/Dsubap
-            fy_shift = freq.fy_axis - 2*numpy.pi * l/Dsubap
-            freq_shift = fast.SpatialFrequencyStruct(fx_shift, fy_shift, freq_per_layer=freq.freq_per_layer)
+                # Quick and dirty SpatialFrequencyStruct here, probably not optimal
+                fx_shift = freq.fx_axis - 2*numpy.pi * k/Dsubap
+                fy_shift = freq.fy_axis - 2*numpy.pi * l/Dsubap
+                freq_shift = fast.SpatialFrequencyStruct(fx_shift, fy_shift, freq_per_layer=freq.freq_per_layer)
 
-            term_1 = (freq.fx/(freq_shift.fy) + freq.fy/(freq_shift.fx))**2
-            term_2 = funcs.turb_powerspectrum_vonKarman(freq_shift, p, L0=L0, l0=l0)
-            mult = term_1 * term_2 *  freq.fx**2 * freq.fy**2 / freq.fabs**4
-            mult[...,midpt_x,midpt_y] = 0.
-            if l == 0:
-                mult[...,midpt_x,:] = term_2[...,midpt_x,:]
-            if k == 0:
-                mult[...,midpt_y] = term_2[...,midpt_y]
-                mult[...,midpt_x,midpt_y] = term_2[...,midpt_x,midpt_y]
-            alias += mult
+                term_1 = (freq.fx/(freq_shift.fy) + freq.fy/(freq_shift.fx))**2
+                term_2 = funcs.turb_powerspectrum_vonKarman(freq_shift, p, L0=L0, l0=l0)
+                mult = term_1 * term_2 *  freq.fx**2 * freq.fy**2 / freq.fabs**4
+                mult[...,midpt_x,midpt_y] = 0.
+                if l == 0:
+                    mult[...,midpt_x,:] = term_2[...,midpt_x,:]
+                if k == 0:
+                    mult[...,midpt_y] = term_2[...,midpt_y]
+                    mult[...,midpt_x,midpt_y] = term_2[...,midpt_x,midpt_y]
+                alias += mult
 
-    alias *= sinc_term * lf_mask
+        alias *= sinc_term * lf_mask
 
     # there is a small chance that there are still some NaNs or infs in the 
     # array, for specific combinations of freqency axes and subapertures.
