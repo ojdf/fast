@@ -69,13 +69,8 @@ class Fast():
     """
     def __init__(self, params):
 
-        if type(params) == dict:
-            self.params = params
-        elif type(params) == str:
-            self.conf = conf.ConfigParser(params)
-            self.params = self.conf.config
-        else:
-            raise Exception("Either config file name or params dict required")
+        self.conf = conf.ConfigParser(params)
+        self.params = self.conf.config
 
         self.Niter = self.params['NITER']
         self.Nchunks = self.params['NCHUNKS']

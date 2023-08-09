@@ -10,14 +10,20 @@ logger = logging.getLogger(__name__)
 
 class ConfigParser():
 
-    def __init__(self, fname):
+    def __init__(self, fname_or_dict):
+        
+        if type(fname_or_dict) == dict:
+            self.config = fname_or_dict
+            self.fname = None
+        elif type(fname_or_dict) == str:
+            self.fname = fname_or_dict
+            self.config = {}
+            self.load(fname_or_dict)
+        else:
+            raise Exception("Either config file name or params dict required")
 
-        self.fname = fname
-        self.config = {}
         self.defaults = {}
-
         self.set_defaults()
-        self.load(fname)
 
         self.check()
         
