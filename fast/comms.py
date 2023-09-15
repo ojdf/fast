@@ -26,12 +26,13 @@ class Modulator():
         symbols_per_iter (int, optional): Number of symbols per iteration of FAST. 
             Defaults to 1000.
     '''
-    def __init__(self, power, modulation, EsN0=None, symbols_per_iter=1000):
+    def __init__(self, power, modulation, EsN0=None, symbols_per_iter=1000, data=None):
         self.power = power / power.mean()
         self.amplitude = numpy.sqrt(self.power)
         self.modulation = modulation
         self.symbols_per_iter = symbols_per_iter
         self.EsN0 = EsN0
+        self.data = data
         if EsN0 != None:
             self.snr = numpy.sqrt(10**(EsN0/10)) * self.power
 
@@ -48,8 +49,15 @@ class Modulator():
 
         else:
             raise ValueError("Scheme not recognised")
-
-        self.symbols = numpy.random.randint(0, self.nsymbols, size=(self.symbols_per_iter, len(self.power)))
+        
+        self.bits_per_symbol = numpy.log2(self.nsymbols).astype(int)
+    
+        if self.data is not None:
+            s, self._pad_bits = _encode(self.data, self.bits_per_symbol)
+            self.symbols = numpy.array([s]*len(self.power)).T
+            self.symbols_per_iter = len(s)
+        else:
+            self.symbols = numpy.random.randint(0, self.nsymbols, size=(self.symbols_per_iter, len(self.power)))
 
     def modulate(self):
 
@@ -95,6 +103,11 @@ class Modulator():
         else:
             d = numpy.array([abs(self.recv_signal - i) for i in self.constellation])
             self.recv_symbols = d.argmin(0)
+
+        if self.data is not None:
+            self.recv_data = numpy.zeros((len(self.power), self.symbols_per_iter), dtype=numpy.uint8)
+            for i in range(self.symbols_per_iter):
+                self.recv_data[i] = _decode(self.recv_symbols[:,i], self.bits_per_symbol, self._pad_bits)
 
         return self.recv_symbols
 
@@ -497,3 +510,52 @@ def _bit_at_index(code, index, bit):
 
     return out
 
+
+def _encode(bs, bps):
+    a = numpy.frombuffer(bs, dtype=numpy.uint8)
+    bits = numpy.unpackbits(a)
+    pad_bits = 0
+
+    # if bps = 1 we are done 
+    if bps == 1:
+        return bits, pad_bits
+
+    r = len(bits)%bps
+    if r > 0:
+        pad_bits = bps -r
+        bits = numpy.pad(bits, [0,pad_bits])
+    symbols = (bits.reshape(-1, bps) * 2**(numpy.arange(bps, dtype=numpy.uint8)[::-1])).sum(1).flatten().astype(numpy.uint8)
+    return symbols, pad_bits
+
+
+def _decode(symbols, bps, pad_bits=0):
+
+    # in the common case where bps = 1, symbols are the bits 
+    if bps == 1:
+        return numpy.packbits(symbols)
+    
+    # unpack bits of symbol array, cut off the unused bits 
+    bits = numpy.unpackbits(symbols).reshape(-1,8)[:,-bps:].flatten()
+    return numpy.packbits(bits).tobytes()[:-(pad_bits>0) or None]
+
+
+def flip_bits(data, ber):
+    if isinstance(data, str):
+        b = data.encode("ascii")
+    elif isinstance(data, numpy.ndarray):
+        b = data.tobytes()
+    else:
+        raise Exception("String or numpy array as data please")
+
+    bits = numpy.unpackbits(numpy.frombuffer(b, dtype=numpy.uint8))
+    # flip_ix = numpy.random.choice(len(bits), size=int(len(bits) * ber), replace=False)
+    flip_ix = numpy.where(numpy.random.rand(len(bits)) < ber)[0]
+    bits[flip_ix] ^= 1
+
+    newbytes = numpy.packbits(bits)
+    if isinstance(data, str):
+        newdata = (newbytes%128).tobytes().decode("ascii")
+    else:
+        newdata = numpy.frombuffer(newbytes.tobytes(), dtype=data.dtype).reshape(data.shape)
+    
+    return newdata
