@@ -293,8 +293,13 @@ class Fast():
             else:
                 ptype = 'gauss'
 
-            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
+            puptmp = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
                 self.W0, self.obsc_ground, ptype=ptype)
+            
+            if self.W0 == "opt":
+                self.pupil, self.W0 = puptmp
+            else:
+                self.pupil = puptmp
 
             # Circ aperture at satellite
             self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat,
@@ -307,8 +312,13 @@ class Fast():
                 Tx_obsc=self.obsc_ground, ptype=ptype)
 
             # Gaussian aperture at satellite (NOTE hard coded 32 pxls)
-            self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat, 
+            pupsattmp = funcs.compute_pupil(32, self.dx_sat, self.D_sat, 
                 W0=self.W0, Tx_obsc=self.obsc_sat, ptype='gauss')
+            
+            if self.W0 == "opt":
+                self.pupil_sat, self.W0 = pupsattmp
+            else:
+                self.pupil_sat = pupsattmp
 
         self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
 

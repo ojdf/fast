@@ -299,7 +299,7 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
         if W0 == "opt":
             g, opt = optimize_fibre(circ_ap, dx, return_size=True)
             logger.debug(f"Optimised gaussian size: {opt}")
-            return g * circ_ap
+            return g * circ_ap, opt
         else:
             I0 = 2 / (numpy.pi * W0**2)
             return gaussian2d(N, W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
@@ -343,11 +343,20 @@ def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
         return coupling_loss(W, N, pupil, dx)
 
     opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
-    
+
+    # the optimization can fail for some (seemingly random) parameter combinations, 
+    # producing a very small value of opt. Try again but change size_max, if still 
+    # doesn't work, then we are stuffed and raise an Exception.
+    if abs(opt) < dx:
+        logger.info("Gaussian mode optimisation failed, trying with different parameters")
+        opt = minimize_scalar(_opt_func, bracket=[size_min, 2*size_max]).x
+        if abs(opt) < dx:
+            raise Exception("Cannot optimise gaussian mode, try changing DX?")
+
     g = gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
 
     if return_size:
-        return g, opt
+        return g, numpy.abs(opt)
     else:
         return g
 
