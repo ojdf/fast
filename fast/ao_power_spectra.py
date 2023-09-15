@@ -9,12 +9,16 @@ from . import fast
 
 def zernike_ft(fabs, phi, D, n_noll):
     n, m = zernIndex(n_noll)
-    if m == 0:
-        return numpy.sqrt(n+1) * (-1)**(n/2.) * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2))
-    elif n_noll % 2 == 0:
-        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.cos(m * phi)
-    else:
-        return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.sin(m * phi)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
+        
+        if m == 0:
+            return numpy.sqrt(n+1) * (-1)**(n/2.) * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2))
+        elif n_noll % 2 == 0:
+            return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.cos(m * phi)
+        else:
+            return numpy.sqrt(2 * (n+1)) * (-1)**((n-m)/2.) * (1j)**m * (2 * jv(n+1, fabs * D / 2) / (fabs * D/2)) * numpy.sin(m * phi)
     
 def zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None):
     phi = numpy.arctan2(fy,fx)
