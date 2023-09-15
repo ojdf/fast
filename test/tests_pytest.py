@@ -115,3 +115,62 @@ def test_sim_coherent():
     sim.run()
     assert sim.I.dtype == complex
 
+def test_fast_fsoc_ook():
+    ptmp = p.copy()
+    ptmp['MODULATION'] = "OOK"
+    sim = fast.comms.FastFSOC(ptmp)
+    sim.run()
+    assert numpy.isfinite(sim.I).all()
+    assert hasattr(sim.modulator, "sep")
+    assert numpy.isfinite(sim.modulator.sep)
+    assert numpy.isfinite(sim.modulator.evm)
+
+def test_fast_fsoc_BPSK():
+    ptmp = p.copy()
+    ptmp['MODULATION'] = "BPSK"
+    sim = fast.comms.FastFSOC(ptmp)
+    sim.run()
+    assert numpy.isfinite(sim.I).all()
+    assert hasattr(sim.modulator, "sep")
+    assert numpy.isfinite(sim.modulator.sep)
+    assert numpy.isfinite(sim.modulator.evm)
+
+def test_fast_fsoc_qam():
+    ptmp = p.copy()
+    ptmp['MODULATION'] = "QAM"
+    sim = fast.comms.FastFSOC(ptmp)
+    sim.run()
+    assert numpy.isfinite(sim.I).all()
+    assert hasattr(sim.modulator, "sep")
+    assert numpy.isfinite(sim.modulator.sep)
+    assert numpy.isfinite(sim.modulator.evm)
+
+# def test_fast_fsoc_ook_withdata():
+#     data = numpy.random.normal(size=100).tobytes()
+#     ptmp = p.copy()
+#     sim = fast.Fast(ptmp)
+#     sim.run()
+#     mod = fast.comms.Modulator(sim.result.power, 'OOK', 10, data=data, symbols_per_iter=len(data))
+#     mod.run()
+#     assert numpy.isfinite(sim.recv_symbols)
+
+def test_ber_ook():
+    ptmp = p.copy()
+    sim = fast.Fast(ptmp)
+    sim.run()
+    ber = fast.comms.ber_ook(10, sim.result.power)
+
+def test_ber_ook_nosamples():
+    ber = fast.comms.ber_ook(10)
+    assert numpy.isfinite(ber)
+
+def test_sep_qam():
+    ptmp = p.copy()
+    sim = fast.Fast(ptmp)
+    sim.run()
+    ber = fast.comms.ber_qam(4, 10, samples=sim.result.power)
+    assert numpy.isfinite(ber)
+
+def test_ber_qam_nosamples():
+    ber = fast.comms.ber_qam(4, 10)
+    assert numpy.isfinite(ber)
