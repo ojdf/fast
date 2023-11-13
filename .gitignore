@@ -2,3 +2,4 @@ __pycache__
 *.pyc
 *.fits
 .vscode
+doc/_build/*
