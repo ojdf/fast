@@ -16,6 +16,7 @@ Once completed, the simulation results can be found in ``sim.result`` (also retu
 
 - ``result.dB_rel`` - results in dB relative to the diffraction limit (no turbulence). 
 - ``result.dB_abs`` - results in dB including all link budget terms, i.e. Rx power / Tx power
+- ``result.dBm`` - results in dBm including all terms in link budget
 - ``result.power`` - results in linear power, units of Watts
 
 Simulation results can be saved to FITS file with most simulation parameters as header information by calling the :py:func:`~fast.fast.Fast.save` function on the sim class
