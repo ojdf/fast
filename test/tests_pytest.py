@@ -177,8 +177,12 @@ def test_ber_qam_nosamples():
 
 # Test complete orbit simulation
 def test_complete_orbit_simulation():
-    tle_path = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle'
-    simulation_test = None
-    simulation_test = fast.complete_orbit_simulation.FAST_sat_orbit("test/test_params.py", "test/test_satellite_param.py", tle_path)
+    import test_satellite_param
 
+    ptmp = p.copy()
+    p_orbit = test_satellite_param.p_simu.copy()
+    tle_path = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle'
+
+    simulation_test = None
+    simulation_test = fast.complete_orbit_simulation.FAST_sat_orbit(ptmp, p_orbit, tle_path)
     assert simulation_test[list(simulation_test.keys())[0]]
