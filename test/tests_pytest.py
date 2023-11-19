@@ -174,3 +174,11 @@ def test_sep_qam():
 def test_ber_qam_nosamples():
     ber = fast.comms.ber_qam(4, 10)
     assert numpy.isfinite(ber)
+
+# Test complete orbit simulation
+def test_complete_orbit_simulation():
+    tle_path = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle'
+    simulation_test = None
+    simulation_test = fast.complete_orbit_simulation.FAST_sat_orbit("test/test_params.py", "test/test_satellite_param.py", tle_path)
+
+    assert simulation_test[list(simulation_test.keys())[0]]

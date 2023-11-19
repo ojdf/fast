@@ -421,3 +421,10 @@ def l_path(h_sat, zeta):
         return r1
     else:
         return r2
+
+
+# Wind correction induced by satellite's movement
+def calculate_wind_correction(h, theta_loop, Tloop):
+    wind_correction = - numpy.array([numpy.sin(numpy.radians(theta_loop[0]/3600)) * h / Tloop,
+                                    numpy.sin(numpy.radians(theta_loop[1]/3600)) * h / Tloop]).T
+    return wind_correction

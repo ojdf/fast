@@ -203,13 +203,25 @@ class Fast():
         else:
             self.L = funcs.l_path(self.params['H_SAT'], self.params['ZENITH_ANGLE'])
 
-        self.wind_speed = self.params['WIND_SPD']
-        self.wind_dir = self.params['WIND_DIR']
+        # PAA 
         self.dtheta = self.params['DTHETA']
         self.paa = numpy.sqrt(self.dtheta[0]**2 + self.dtheta[1]**2)
-        self.wind_vector = (self.wind_speed * 
-            numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
-                         numpy.sin(numpy.radians(self.wind_dir))])).T
+
+        # Wind calculations
+        self.wind_dir = self.params['WIND_DIR']
+        try:
+            self.wind_dir = [(x - self.params['AZIMUT_SAT'])%380 for x in self.wind_dir]
+        except KeyError:
+            pass 
+        self.wind_vector = (self.params['WIND_SPD'] * numpy.array([numpy.cos(numpy.radians(self.wind_dir)),
+                        (numpy.sin(numpy.radians(self.wind_dir)))/self.zenith_correction])).T
+        try:
+            self.wind_correction = funcs.calculate_wind_correction(self.h, self.params['ANISO_DL'], self.params['TLOOP'])
+            self.wind_vector += self.wind_correction
+        except KeyError:
+            pass
+        self.wind_speed = numpy.sqrt(self.wind_vector[:,0]**2 + self.wind_vector[:,1]**2)
+
 
         # Atmospheric parameters at zenith, at 500 nm
         self.r0 = cn2_to_r0(self.params['CN2_TURB'].sum(), lamda=500e-9)
