@@ -5,3 +5,4 @@ astropy
 tqdm
 pytest
 coverage
+skyfield
