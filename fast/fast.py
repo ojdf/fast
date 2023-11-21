@@ -76,6 +76,9 @@ class Fast():
         self.Nchunks = self.params['NCHUNKS']
         self.fftw = self.params['FFTW']
         self.nthreads = self.params['FFTW_THREADS']
+        self.seed = self.params['SEED']
+        if self.seed != None:
+            self.set_seed(self.seed)
 
         self.temporal = self.params['TEMPORAL']
         self.dt = self.params['DT']
@@ -654,6 +657,9 @@ class Fast():
         gamma = 1/numpy.cos(zenith_angle_rads)
         return gamma
 
+    def set_seed(self, seed):
+        funcs._R = numpy.random.default_rng(seed)
+
     def make_header(self, params):
         logger.info("Making FITS header")
 
@@ -687,6 +693,8 @@ class Fast():
         hdr['THETA0'] = self.theta0
         hdr['TAU0'] = self.tau0
         hdr["DIFFLIM"] = self.diffraction_limit
+        if self.seed != None:
+            hdr["SEED"] = self.seed
         return hdr
 
     def save(self, fname, **kwargs):

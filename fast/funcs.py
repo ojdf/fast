@@ -17,6 +17,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# set rng (can be reset to a given seed by simulation later)
+_R = numpy.random.default_rng()
+
 def f_grid_linear(L0, l0, max_size=1024):
     '''
     Spatial frequency grid with linear spacing.
@@ -369,8 +372,8 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
 
     if not temporal:
 
-        rand = numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape)) \
-         + 1j * numpy.random.normal(0,1,size=(Nscrns, *powerspec.shape))
+        rand = _R.normal(0,1,size=(Nscrns, *powerspec.shape)) \
+         + 1j * _R.normal(0,1,size=(Nscrns, *powerspec.shape))
 
         return rand * numpy.sqrt(powerspec)
 
@@ -379,8 +382,8 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
         # NEW METHOD
         if shifts is not None:
 
-            r = numpy.random.normal(0,1,size=shifts.shape[1:]) \
-                + 1j * numpy.random.normal(0,1,size=shifts.shape[1:])
+            r = _R.normal(0,1,size=shifts.shape[1:]) \
+                + 1j * _R.normal(0,1,size=shifts.shape[1:])
 
             r = (r.T * numpy.sqrt(weights)).T
 
@@ -389,8 +392,8 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
             return rand * numpy.sqrt(powerspec)
 
         else:
-            r_fourier = numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns)) \
-                + 1j * numpy.random.normal(0,1,size=(*powerspec.shape, Nscrns))
+            r_fourier = _R.normal(0,1,size=(*powerspec.shape, Nscrns)) \
+                + 1j * _R.normal(0,1,size=(*powerspec.shape, Nscrns))
 
             r_fourier *= numpy.sqrt(temporal_powerspecs/temporal_powerspecs.sum())
 

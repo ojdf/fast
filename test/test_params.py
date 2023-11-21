@@ -17,10 +17,11 @@ p = {
 'FFTW': False,                              # Use pyfftw
 'FFTW_THREADS': 1,                          # Number of fftw threads
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
-'TEMPORAL': False,                          # Generate temporal irradiance sequences
+'TEMPORAL': True,                          # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
 'LOGFILE': None,                            # File for logs, if None will log to stdout
 'LOGLEVEL': "INFO",                         # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+'SEED': None,                               # Random seed for deterministic simulations  
 
 # Transmitter/Receiver parameters
 'WVL': 1550e-9,                             # Communications laser wavelength [m]
