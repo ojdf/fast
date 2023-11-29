@@ -2,7 +2,7 @@ import numpy
 from scipy.special import erfc
 from scipy.integrate import simps
 from scipy.optimize import minimize_scalar
-from scipy.ndimage import rotate
+from scipy.ndimage import rotate, shift
 from scipy.interpolate import RectBivariateSpline
 from . import ao_power_spectra
 from aotools import fouriertransform, circle, gaussian2d
@@ -207,20 +207,7 @@ def pdf_lognorm(Is, sigma, Imn=1):
 
 #     return pI
 
-def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=None, 
-                    fftw=False, fftw_objs=None, temporal=False, temporal_powerspec=None, shifts=None, 
-                    shifts_sh=None, phs_var_weights=None, phs_var_weights_sh=None):
-
-    df = freq.df
-
-    # for random scrns, we can use both real and imag parts of produced screens 
-    # which means we only need to generate half the number of scrns 
-    if not temporal:
-        Nscrns //= 2 
-
-    rand = generate_random_coefficients(Nscrns, powerspec, 
-                temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts,
-                weights=phs_var_weights)
+def make_phase_fft(rand, df, fftw=False, fftw_objs=None, double=False):
 
     if fftw:
         fftw_objs['IN'][:] = numpy.fft.fftshift(rand * df, axes=(-1,-2))
@@ -230,67 +217,45 @@ def make_phase_fft(Nscrns, freq, powerspec, sh=False, powerspecs_lo=None, dx=Non
     else:
         phasescrn = fouriertransform.ift2(rand * df, 1)
 
-    if sh:
-        # subharmonics
-
-        N = phasescrn.shape[-1]
-        phs_lo = numpy.zeros(phasescrn.shape[1:])
-        D = dx * N
-        coords = numpy.arange(-D/2, D/2, dx)
-        if len(coords) == N+1:
-            coords = coords[:-1]
-        x, y = numpy.meshgrid(coords, coords)
-
-        # preallocate data arrays
-        SH = numpy.empty((Nscrns,N,N), dtype='complex')
-        tmp = numpy.empty((Nscrns,3,3,N,N), dtype='complex')
-
-        for i,p in enumerate(range(1,4)):
-            df_lo = 2*numpy.pi/(3**p * D)
-            fx_lo = freq.subharm.fx[i]
-            fy_lo = freq.subharm.fy[i]
-            fabs_lo = freq.subharm.fabs[i]
-            if temporal:
-                shifts_lo = shifts_sh[:,:,i]
-                weights_lo = phs_var_weights_sh[:,i]
-            else:
-                shifts_lo = None
-                weights_lo = None
-
-            powerspec_lo = powerspecs_lo[i]
-
-            powerspec_lo[1,1] = 0
-
-            rand_lo = generate_random_coefficients(Nscrns, powerspec_lo,
-                        temporal=temporal, temporal_powerspecs=temporal_powerspec, shifts=shifts_lo, weights=weights_lo) \
-                            * df_lo
-
-            modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
-                                  + y[numpy.newaxis,numpy.newaxis,...] * fy_lo[...,numpy.newaxis,numpy.newaxis]))
-
-            numpy.multiply(rand_lo[...,numpy.newaxis,numpy.newaxis], modes, out=tmp)
-            numpy.sum(tmp, axis=(1,2), out=SH)
-
-            # old, slightly slower method
-            # SH = numpy.zeros((Nscrns,N,N), dtype='complex')
-            # for i in range(3):
-            #     for j in range(3):
-            #         SH += (rand_lo[:,i,j] * numpy.tile(numpy.exp(1j * (fx_lo[i,j]*x + fy_lo[i,j]*y)), (Nscrns,1,1)).T).T
-
-            phs_lo = phs_lo + SH
-
-        phs_lo = (phs_lo.T - phs_lo.mean((1,2))).T
-
+    if double:
+        return numpy.vstack([phasescrn.real, phasescrn.imag])
     else:
-        phs_lo = 0 + 1j*0
-    
-    if not temporal:
-        phs = (phasescrn + phs_lo)
-        phs = numpy.vstack([phs.real, phs.imag])
-    else:
-        phs = phasescrn.real + phs_lo.real
+        return phasescrn.real
 
-    return phs
+def make_phase_subharm(rand, freq, N, dx, double=False):
+
+    phs_lo = numpy.zeros((N,N))
+    D = dx * N
+    coords = numpy.arange(-D/2, D/2, dx)
+    if len(coords) == N+1:
+        coords = coords[:-1]
+    x, y = numpy.meshgrid(coords, coords)
+
+    # preallocate data arrays
+    SH = numpy.empty((rand.shape[0],N,N), dtype='complex')
+    tmp = numpy.empty((rand.shape[0],3,3,N,N), dtype='complex')
+
+    for i,p in enumerate(range(1,4)):
+        df_lo = freq.subharm.df[i]
+        fx_lo = freq.subharm.fx[i]
+        fy_lo = freq.subharm.fy[i]
+
+        rand_lo = rand[:,i] * df_lo
+
+        modes = numpy.exp(1j * (x[numpy.newaxis,numpy.newaxis,...] * fx_lo[...,numpy.newaxis,numpy.newaxis]
+                                + y[numpy.newaxis,numpy.newaxis,...] * fy_lo[...,numpy.newaxis,numpy.newaxis]))
+
+        numpy.multiply(rand_lo[...,numpy.newaxis,numpy.newaxis], modes, out=tmp)
+        numpy.sum(tmp, axis=(1,2), out=SH)
+
+        phs_lo = phs_lo + SH
+
+    phs_lo = (phs_lo.T - phs_lo.mean((1,2))).T 
+
+    if double:
+        return numpy.vstack([phs_lo.real, phs_lo.imag]) 
+    else:
+        return phs_lo.real
     
 def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
@@ -368,7 +333,13 @@ def coupling_loss(W, N, pupil, dx):
     coupling = numpy.abs((fibre_field * pupil).sum() * dx**2)**2
     return 1 - coupling
 
-def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None, shifts=None, weights=None):
+def generate_random_coefficients(shape):
+    
+    rand = _R.normal(0,1,size=shape) + 1j * _R.normal(0,1,size=shape)
+
+    return rand 
+
+def generate_random_coefficients_logamp(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None):
 
     if not temporal:
 
@@ -376,30 +347,16 @@ def generate_random_coefficients(Nscrns, powerspec,  temporal=False, temporal_po
          + 1j * _R.normal(0,1,size=(Nscrns, *powerspec.shape))
 
         return rand * numpy.sqrt(powerspec)
-
-    else:
     
-        # NEW METHOD
-        if shifts is not None:
+    else:
+        r_fourier = _R.normal(0,1,size=(*powerspec.shape, Nscrns)) \
+            + 1j * _R.normal(0,1,size=(*powerspec.shape, Nscrns))
 
-            r = _R.normal(0,1,size=shifts.shape[1:]) \
-                + 1j * _R.normal(0,1,size=shifts.shape[1:])
+        r_fourier *= numpy.sqrt(temporal_powerspecs/temporal_powerspecs.sum())
 
-            r = (r.T * numpy.sqrt(weights)).T
+        r = fouriertransform.ft(r_fourier,1)
 
-            rand = (r * shifts).sum(1)
-
-            return rand * numpy.sqrt(powerspec)
-
-        else:
-            r_fourier = _R.normal(0,1,size=(*powerspec.shape, Nscrns)) \
-                + 1j * _R.normal(0,1,size=(*powerspec.shape, Nscrns))
-
-            r_fourier *= numpy.sqrt(temporal_powerspecs/temporal_powerspecs.sum())
-
-            r = fouriertransform.ft(r_fourier,1)
-
-            return r.T * numpy.sqrt(powerspec)
+        return r.T * numpy.sqrt(powerspec)
 
 def temporal_autocorrelation(I):
     # normalise

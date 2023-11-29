@@ -6,6 +6,7 @@ from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime, fouriert
 from astropy.io import fits
 from tqdm import tqdm
 import logging
+from scipy.interpolate import RectBivariateSpline
 
 try:
     import pyfftw
@@ -88,7 +89,7 @@ class Fast():
         else:
             self.Niter_per_chunk = self.Niter // self.Nchunks
 
-        if not (self.Niter_per_chunk % 2 == 0):
+        if not (self.Niter_per_chunk % 2 == 0) and not self.temporal:
             raise Exception('NITER/NCHUNKS must be even number')
 
         self.init_logging()
@@ -118,11 +119,19 @@ class Fast():
         else:
             I = numpy.zeros((self.Nchunks, self.Niter_per_chunk))
 
+        logger.debug("Compute log amplitude values")
+        self.compute_logamp()
+
+        if not self.temporal:
+            phsfunc = self.compute_phs
+        else:
+            phsfunc = self.compute_phs_temporal
+        
         for i in tqdm(range(self.Nchunks)):
-            logger.debug(f"Compute phase and log-amplitude for chunk {i+1}")
-            self.compute_phs_logamp()
+            logger.debug(f"Compute phase for chunk {i+1}")
+            phsfunc(chunk=i)
             logger.debug(f"Compute detector for chunk {i+1}")
-            I[i] = self.compute_detector()
+            I[i] = self.compute_detector(chunk=i)
 
         self.result = FastResult(I.flatten(), self.diffraction_limit)
         self.I = self.result.power # backwards compatibility
@@ -174,23 +183,44 @@ class Fast():
             else:
                 L0_Npxls = 0
 
-            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, L0_Npxls])
+            if self.params['TEMPORAL']:
+                # need enough pixels to not wrap 
+                temporal_Npxls = int(self.params['WIND_SPD'].max() * self.params['DT'] * self.params['NITER'] / self.params['DX'] / 2)
+            else:
+                temporal_Npxls = 0
+
+            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, L0_Npxls, temporal_Npxls])
 
             logger.info(f"Auto set NPXLS to {self.Npxls}")
 
         else:
             self.Npxls = self.params['NPXLS']
 
+            # Warning if in temporal mode and not enough pixels 
+            if self.params['TEMPORAL']:
+                temporal_Npxls = int(self.params['WIND_SPD'].max() * self.params['DT'] * self.params['NITER'] / self.params['DX'] / 2)
+                if self.Npxls < temporal_Npxls:
+                    logger.warning("NPXLS is likely too small -- some periodicity may occur in your resulting time series")
+                    logger.warning(f"Current value: {self.Npxls}")
+                    logger.warning(f"Recommended value: {temporal_Npxls}")
+
+        self.Npxls_pup = int(numpy.ceil(self.D_ground/self.dx)) + 2
+
         self.freq = SpatialFrequencies(self.Npxls, self.dx)
 
         self.subharmonics = self.params['SUBHARM']
 
+        if self.temporal:
+            self.freq.make_temporal_freqs(len(self.h), self.Npxls, self.Niter,
+                self.wind_speed, self.wind_dir, self.dt)
+            
+            # also turn off subharmonics for temporal mode 
+            if self.subharmonics:
+                logger.info("SUBHARM not used in TEMPORAL mode")
+                self.subharmonics = False
+        
         if self.subharmonics:
             self.freq.make_subharm_freqs()
-
-        if self.temporal:
-            self.freq.make_temporal_freqs(len(self.h), self.Npxls, self.Niter_per_chunk,
-                self.wind_speed, self.wind_dir, self.dt)
 
     def init_atmos(self):
 
@@ -301,6 +331,7 @@ class Fast():
         # probably change this 
         self.dx_sat = self.D_sat/32
 
+
         if self.params['PROP_DIR'] == 'up':
             # Gaussian aperture at ground
             if self.params['AXICON']:
@@ -337,6 +368,10 @@ class Fast():
 
         self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
 
+        # Cut out only the actual pupil 
+        self.pup_coords = numpy.array((numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2), numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2))).astype(int)
+        self.pupil = self.pupil[self.pup_coords[0],:][:,self.pup_coords[1]]
+
         if self.temporal:
             # compute high-res pupil filter spline for later integration
             fx_max = self.freq.temporal.fx_axis.max()
@@ -369,7 +404,9 @@ class Fast():
         size = self.Niter_per_chunk
         if not self.temporal:
             size //= 2
-        s = (size, *self.powerspec.shape)
+            s = (size, *self.powerspec.shape)
+        else:
+            s = self.powerspec_per_layer.shape
 
         self.fftw_objs = {}
         self.fftw_objs['IN'] = pyfftw.empty_aligned(s, dtype='complex128')
@@ -383,8 +420,8 @@ class Fast():
 
     def init_phs_logamp(self):
         logger.info("Initialising phase and log-amplitude arrays")
-        self.phs = numpy.zeros((self.Niter_per_chunk, self.Npxls, self.Npxls))
-        self.logamp = numpy.zeros((self.Niter_per_chunk))
+        self.phs = numpy.zeros((self.Niter_per_chunk, self.Npxls_pup, self.Npxls_pup))
+        self.logamp = numpy.zeros((self.Niter))
 
     def compute_powerspec(self):
         logger.info("Computing (residual) phase power spectra")
@@ -403,7 +440,7 @@ class Fast():
         if self.alias and self.ao_mode != 'NOAO':
             self.alias_powerspec = ao_power_spectra.Jol_alias_openloop(
                 self.freq.main, self.Dsubap, self.cn2, self.lf_mask, self.wind_vector,
-                self.texp, self.wvl, 10, 10, self.L0, self.l0)
+                self.texp, self.wvl, 5, 5, self.L0, self.l0)
 
             self.alias_error = funcs.integrate_powerspectrum(funcs.integrate_path(
                 self.alias_powerspec * 2 * numpy.pi * self.k**2, self.h, layer=True), self.freq.main.f)
@@ -436,6 +473,7 @@ class Fast():
         self.logamp_var = funcs.integrate_powerspectrum(self.logamp_powerspec, self.freq.main.f)
 
         if self.subharmonics:
+            logger.info("Computing subharmonics power spectra")
             self.turb_lo = funcs.turb_powerspectrum_vonKarman(
                 self.freq.subharm, self.cn2, self.L0, self.l0)
 
@@ -447,7 +485,7 @@ class Fast():
             if self.alias and self.ao_mode != 'NOAO':
                 self.alias_subharm = ao_power_spectra.Jol_alias_openloop(
                     self.freq.subharm, self.Dsubap, 
-                    self.cn2, self.lf_mask_subharm, self.wind_vector, self.texp, self.wvl, 10, 10,
+                    self.cn2, self.lf_mask_subharm, self.wind_vector, self.texp, self.wvl, 5, 5,
                     self.L0, self.l0)
             else:
                 self.alias_subharm = 0.
@@ -480,77 +518,121 @@ class Fast():
 
         if self.temporal:
 
-            f_dot_dx = (self.freq.fx[numpy.newaxis,...] * self.wind_vector[:,0,numpy.newaxis, numpy.newaxis] 
-                    + self.freq.fy[numpy.newaxis,...] * self.wind_vector[:,1,numpy.newaxis, numpy.newaxis])
+            logger.info("Computing temporal power spectra")
 
-            dts = numpy.arange(0, self.Niter_per_chunk) * self.dt
-            self.shifts = numpy.exp(1j * f_dot_dx* dts[..., numpy.newaxis, numpy.newaxis, numpy.newaxis])
+            logger.debug("Computing spatial shifts")
+            dts = numpy.arange(1, self.Niter_per_chunk+1) * self.dt
+            self.pixel_shifts = dts * self.wind_vector[...,numpy.newaxis] / self.dx
 
-            if self.subharmonics:
-                f_dot_dx_sh = (self.freq.subharm.fx[numpy.newaxis,...] * self.wind_vector[:,0,numpy.newaxis,numpy.newaxis,numpy.newaxis] 
-                            + self.freq.subharm.fy[numpy.newaxis,...] * self.wind_vector[:,1,numpy.newaxis,numpy.newaxis,numpy.newaxis])
-                self.shifts_sh = numpy.exp(1j * f_dot_dx_sh * dts[..., numpy.newaxis, numpy.newaxis, numpy.newaxis, numpy.newaxis])
+            # NOTE I think we have no need for phase temporal ps so have removed this calculation:
 
-            self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
-                self.freq.temporal, self.cn2, self.L0, self.l0)
+            # self.turb_temporal = funcs.turb_powerspectrum_vonKarman(
+            #     self.freq.temporal, self.cn2, self.L0, self.l0)
 
-            self.G_ao_temporal = ao_power_spectra.G_AO_PAOLA(
-                self.freq.temporal, self.lf_mask_temporal, 
-                self.ao_mode, self.h, self.wind_vector, self.dtheta, self.D_ground, self.wvl, self.Zmax, 
-                self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
+            # self.G_ao_temporal = ao_power_spectra.G_AO_PAOLA(
+            #     self.freq.temporal, self.lf_mask_temporal, 
+            #     self.ao_mode, self.h, self.wind_vector, self.dtheta, self.D_ground, self.wvl, self.Zmax, 
+            #     self.tloop, self.texp, self.Dsubap, self.modal, self.modal_mult)
 
-            if self.alias and self.ao_mode != 'NOAO':
-                self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
-                    self.freq.temporal, self.Dsubap, 
-                    self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
-                    self.L0, self.l0)
-            else:
-                self.alias_temporal = 0.
+            # if self.alias and self.ao_mode != 'NOAO':
+            #     self.alias_temporal = ao_power_spectra.Jol_alias_openloop(
+            #         self.freq.temporal, self.Dsubap, 
+            #         self.cn2, self.lf_mask_temporal, self.wind_vector, self.texp, self.wvl, 10, 10,
+            #         self.L0, self.l0)
+            # else:
+            #     self.alias_temporal = 0.
 
-            if self.noise > 0 and self.ao_mode != 'NOAO':
-                noise_temporal = ao_power_spectra.Jol_noise_openloop(
-                    self.freq.temporal, self.Dsubap, self.noise, self.lf_mask_temporal)
-                self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=True)
+            # if self.noise > 0 and self.ao_mode != 'NOAO':
+            #     noise_temporal = ao_power_spectra.Jol_noise_openloop(
+            #         self.freq.temporal, self.Dsubap, self.noise, self.lf_mask_temporal)
+            #     self.noise_temporal = funcs.integrate_path(noise_temporal, h=self.h, layer=True)
                 
-            else:
-                self.noise_temporal = 0.
+            # else:
+            #     self.noise_temporal = 0.
 
-            temporal_powerspec_beforeintegration = 2 * numpy.pi * self.k**2 * \
-                funcs.integrate_path(self.turb_temporal * self.G_ao_temporal + self.alias_temporal, h=self.h, layer=True) \
-                + self.noise_temporal
+            # temporal_powerspec_beforeintegration = 2 * numpy.pi * self.k**2 * \
+            #     funcs.integrate_path(self.turb_temporal * self.G_ao_temporal + self.alias_temporal, h=self.h, layer=True) \
+            #     + self.noise_temporal
 
             # integrate along y axis
-            self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
+            # self.temporal_powerspec = temporal_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
             # self.temporal_powerspec[len(self.temporal_powerspec)//2] = 0. # ensure the middle is 0!
+            self.temporal_powerspec = None
 
+            logger.debug("Generating 2D temporal logamp powerspec (before integration)")
             temporal_logamp_powerspec_beforeintegration = ao_power_spectra.logamp_powerspec(
                 self.freq.temporal, self.h, self.cn2, self.wvl, pupilfilter=self.pupil_filter_temporal, 
                 layer=True, L0=self.L0, l0=self.l0)
 
+            logger.debug("Integrate 2D temporal logamp powerspec along axis orthogonal to wind direction ")
             self.temporal_logamp_powerspec = temporal_logamp_powerspec_beforeintegration.sum(-2) * self.freq.main.dfy
 
-    def compute_phs_logamp(self):
+    def compute_phs(self, chunk=0):
 
         self.phs[:] = 0
-        self.logamp[:] = 0
 
-        self.phs[:] = funcs.make_phase_fft(
-            self.Niter_per_chunk, self.freq, self.powerspec, self.subharmonics, self.powerspec_subharm, 
-            self.dx, self.fftw, self.fftw_objs, self.temporal, self.temporal_powerspec, self.shifts, self.shifts_sh, 
-            self.phs_var_weights, self.phs_var_weights_sh)
+        rand = funcs.generate_random_coefficients((self.Niter_per_chunk//2, *self.powerspec.shape))
+        rand *= numpy.sqrt(self.powerspec)
 
-        self.logamp[:] = \
-            funcs.generate_random_coefficients(self.Niter_per_chunk, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
+        self.phs[:] = funcs.make_phase_fft(rand, self.freq.main.df, self.fftw, self.fftw_objs, double=True)[:,self.pup_coords[0],:][:,:,self.pup_coords[1]]
+
+        if self.subharmonics:
+
+            rand_lo = funcs.generate_random_coefficients((self.Niter_per_chunk//2, *self.powerspec_subharm.shape))
+            rand_lo *= numpy.sqrt(self.powerspec_subharm)
+
+            self.phs += funcs.make_phase_subharm(rand_lo, self.freq, self.Npxls, self.dx, double=True)[:,self.pup_coords[0],:][:,:,self.pup_coords[1]]
+
+        return self.phs
+    
+    def compute_phs_temporal(self, chunk=0):
+
+        if chunk == 0:
+        
+            rand = funcs.generate_random_coefficients(self.powerspec_per_layer.shape)
+            rand *= numpy.sqrt(self.powerspec_per_layer)
+
+            scrns = funcs.make_phase_fft(rand, self.freq.main.df, self.fftw, self.fftw_objs, double=False)
+            self._interps = [RectBivariateSpline(numpy.arange(self.Npxls), numpy.arange(self.Npxls), i, kx=1, ky=1, s=0) for i in scrns]
+
+            self.interp_coords = self.pup_coords[numpy.newaxis,:,numpy.newaxis,:].astype(float) + self.pixel_shifts[:,:,:,numpy.newaxis]
+
+        self.phs[:] = 0
+
+        coord = self.interp_coords % self.Npxls
+        coord.sort(-1)
+
+        diffs = numpy.abs(numpy.diff(coord, axis=-1))
+        shifts = diffs.argmax(-1)
+        shifts[numpy.isclose(diffs,1).all(-1)] = 0
+
+        for i, scrn in enumerate(self._interps):
+            for j in range(self.Niter_per_chunk):
+                x = coord[i,0,j]
+                y = coord[i,1,j]
+                p = scrn(x, y)
+                self.phs[j] += numpy.roll(p, -shifts[i,:,j], axis=(0,1))
+
+        self.interp_coords += self.pixel_shifts[:,:,-1,numpy.newaxis, numpy.newaxis]
 
         return self.phs
 
-    def compute_detector(self):
+    def compute_logamp(self):
+
+        self.logamp[:] = 0
+        self.logamp[:] = \
+            funcs.generate_random_coefficients_logamp(self.Niter, self.logamp_var, self.temporal, self.temporal_logamp_powerspec).real
+
+        return self.logamp
+
+    def compute_detector(self, chunk=0):
 
         pupil = self.pupil * self.fibre_efield
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
-        
-        self.random_iters = numpy.exp(self.logamp) * phase_component
+        logamp_component = numpy.exp(2*self.logamp[chunk*self.Niter_per_chunk:(chunk+1)*self.Niter_per_chunk])
+
+        self.random_iters = logamp_component * phase_component
         normalisation = pupil.sum() * self.dx**2
 
         self.random_iters /= normalisation
@@ -737,7 +819,7 @@ class SpatialFrequencies():
     def make_temporal_freqs(self, nlayer, Ny, Nx, wind_speed, wind_dir, dt):
 
         fx_axes = []
-        fy_axes = numpy.tile(self.main.f, (nlayer,1))
+        fy_axes = []
         
         for i in range(nlayer):
             dx = wind_speed[i] * dt
@@ -749,7 +831,10 @@ class SpatialFrequencies():
             fx_axis = numpy.arange(-Nx/2, Nx/2) * df_temporal
             fx_axes.append(fx_axis)
 
-        self.temporal = SpatialFrequencyStruct(numpy.array(fx_axes), fy_axes, rot=numpy.radians(wind_dir), freq_per_layer=True)
+            fy_axis = numpy.arange(-Ny/2, Ny/2) * self.main.dfy
+            fy_axes.append(fy_axis)
+
+        self.temporal = SpatialFrequencyStruct(numpy.array(fx_axes), numpy.array(fy_axes), rot=numpy.radians(wind_dir), freq_per_layer=True)
 
     def make_logamp_freqs(self, N=None, dx=None):
         if N is None and dx is None:

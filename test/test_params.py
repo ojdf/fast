@@ -6,18 +6,18 @@ from fast import turbulence_models
 
 # define turbulence profile and wind speeds, directions
 h, cn2, w = turbulence_models.HV57_Bufton_profile(4)
-wdir = [0,90,180,270]
+wdir = [0, 90, 180, 270]
 
 p = {
 # Simulation parameters
-'NPXLS': 128,                               # Number of sim pixels (can be "auto") 
+'NPXLS': "auto",                            # Number of sim pixels (can be "auto") 
 'DX': 0.01,                                 # Pixel scale (can be "auto") [m/pixel] 
-'NITER': 1000,                              # Number of random iterations
-'SUBHARM': True,                            # Include subharmonics
+'NITER': 100,                               # Number of random iterations
+'SUBHARM': False,                           # Include subharmonics (ignored if TEMPORAL=True)
 'FFTW': False,                              # Use pyfftw
 'FFTW_THREADS': 1,                          # Number of fftw threads
 'NCHUNKS': 10,                              # Number of chunks to split Niter into (reduces memory requirements)
-'TEMPORAL': True,                          # Generate temporal irradiance sequences
+'TEMPORAL': True,                           # Generate temporal irradiance sequences
 'DT': 0.001,                                # Simulation timestep (if temporal sequences used)
 'LOGFILE': None,                            # File for logs, if None will log to stdout
 'LOGLEVEL': "INFO",                         # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)

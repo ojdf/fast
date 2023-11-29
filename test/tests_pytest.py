@@ -48,9 +48,15 @@ def test_sim_fftw():
     ptmp['FFTW'] = True
     run_sim(ptmp)
 
-def test_sim_temporal():
+def test_sim_randomScrns():
     ptmp = p.copy()
-    ptmp['TEMPORAL'] = True
+    ptmp['TEMPORAL'] = False
+    run_sim(ptmp)
+
+def test_sim_subharm():
+    ptmp = p.copy()
+    ptmp['SUBHARM'] = True
+    ptmp['TEMPORAL'] = False
     run_sim(ptmp)
 
 def test_sim_obsc():
