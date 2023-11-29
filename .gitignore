@@ -3,3 +3,4 @@ __pycache__
 *.fits
 .vscode
 doc/_build/*
+.ipynb_checkpoints
