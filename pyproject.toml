@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fast-sim"
+authors = [
+  { name="Ollie Farley", email="o.j.d.farley@durham.ac.uk" },
+]
+description = "Fourier domain Adaptive optics Simulation Tool"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+license = {file = "LICENSE.md"}
+dependencies = ["numpy", 
+"scipy", 
+"aotools >= 1.0.7",
+"astropy",
+"tqdm",
+"skyfield"]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = ["pytest", "coverage"]
+
+[tool.setuptools_scm]
+write_to = "fast/_version.py"
+
+[project.urls]
+Homepage = "https://github.com/ojdf/fast"
+Documentation = "https://ojdf.github.io/fast"

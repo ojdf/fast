@@ -15,15 +15,23 @@ See `requirements.txt`
 It is recommended to install [pyFFTW](https://pypi.org/project/pyFFTW/) to speed up FFTs. 
 
 ## Installation
-FAST is pure python, so hopefully there is not anything to compile, just ensure that the FAST directory is on your `PYTHONPATH`, or navigate to the directory and run 
 
-`python setup.py install`
+### PyPI
+`pip install fast-sim`
+
+### From Source
+
+For the latest developments, clone this repository run `pip install -r requirements.txt` to get the required dependencies. Then, ensure that the FAST directory is on your `PYTHONPATH`, or navigate to the directory and run
+
+`pip install .`
 
 To confirm correct installation, try running 
 
 `cd test && python test_script.py`
 
-in the FAST directory, which should run a short simulation. 
+in the FAST directory, which should run a short simulation. You can also run the unit tests with 
+
+`pytest -v test/tests_pytest.py`
 
 ## Configuration
 Config is handled currently by python scripts, an example of which is shown in `test_params.py`. The config file should define a dictionary `p` which contains all of the configuration information required. If any values are missed, they will be replaced by defaults. 

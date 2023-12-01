@@ -8,13 +8,13 @@ from tqdm import tqdm
 import logging
 from scipy.interpolate import RectBivariateSpline
 
+logger = logging.getLogger(__name__)
+
 try:
     import pyfftw
     _pyfftw = True
 except ImportError:
     _pyfftw = False
-
-logger = logging.getLogger(__name__)
 
 
 class Fast():
