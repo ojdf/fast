@@ -3,7 +3,7 @@ Installation
 
 Install from PyPI with
 
-``pip install fast-sim``
+``pip install fast-aosim``
 
 For the latest releases, the source code can be obtained from https://github.com/ojdf/fast. There is nothing to compile since FAST is pure python, just ensure that the FAST directory is on your ``PYTHONPATH``, or navigate to the directory and run 
 

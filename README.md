@@ -17,7 +17,7 @@ It is recommended to install [pyFFTW](https://pypi.org/project/pyFFTW/) to speed
 ## Installation
 
 ### PyPI
-`pip install fast-sim`
+`pip install fast-aosim`
 
 ### From Source
 
