@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fast-sim"
+name = "fast-aosim"
 authors = [
   { name="Ollie Farley", email="o.j.d.farley@durham.ac.uk" },
 ]
