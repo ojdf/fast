@@ -1,0 +1,21 @@
+:py:mod:`fast`
+==============
+
+.. py:module:: fast
+
+
+Submodules
+----------
+.. toctree::
+   :titlesonly:
+   :maxdepth: 1
+
+   ao_power_spectra/index.rst
+   comms/index.rst
+   complete_orbit_simulation/index.rst
+   conf/index.rst
+   fast/index.rst
+   funcs/index.rst
+   turbulence_models/index.rst
+
+
