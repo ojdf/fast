@@ -381,8 +381,8 @@ class Fast():
             N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
     
             pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground,
-                self.W0, Tx_obsc=self.obsc_ground, ptype=ptype)
-            self.freq.make_logamp_freqs(N=N_req, dx=dx_req)
+                self.W0, Tx_obsc=self.obsc_ground, ptype=ptype, Ny=2*self.Npxls_pup)
+            self.freq.make_logamp_freqs(Nx=N_req, dx=dx_req, Ny=2*self.Npxls_pup, dy=self.dx)
             self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal, spline=True)
 
         self.smf = self.params['SMF']
@@ -836,14 +836,16 @@ class SpatialFrequencies():
 
         self.temporal = SpatialFrequencyStruct(numpy.array(fx_axes), numpy.array(fy_axes), rot=numpy.radians(wind_dir), freq_per_layer=True)
 
-    def make_logamp_freqs(self, N=None, dx=None):
-        if N is None and dx is None:
+    def make_logamp_freqs(self, Nx=None, dx=None, Ny=None, dy=None):
+        if Nx is None and dx is None:
             self.logamp = self.main
            
         else:
-            df = 2*numpy.pi/(N*dx)
-            fx_axis = numpy.arange(-N/2., N/2.) * df
-            self.logamp = SpatialFrequencyStruct(fx_axis)
+            dfx = 2*numpy.pi/(Nx*dx)
+            fx_axis = numpy.arange(-Nx/2., Nx/2.) * dfx
+            dfy = 2*numpy.pi/(Ny*dy)
+            fy_axis = numpy.arange(-Ny/2., Ny/2.) * dfy
+            self.logamp = SpatialFrequencyStruct(fx_axis, fy_axis)
 
 class SpatialFrequencyStruct():
 

@@ -159,7 +159,7 @@ def Jol_noise_openloop(freq, Dsubap, noise_variance, lf_mask):
 
     return lf_mask * powerspec
 
-def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=10, kmax=10, L0=numpy.inf, l0=1e-6):
+def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=3, kmax=3, L0=numpy.inf, l0=1e-6):
     fx = freq.fx
     fy = freq.fy
     fabs = freq.fabs
@@ -183,11 +183,13 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
     else:
         v_dot_kappa = 0
 
-    sinc_term = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))**2
 
     #TODO: the central pixel may still be wrong
     with warnings.catch_warnings(): 
         warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
+        
+        sinc_term = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))**2
+        term_0 = freq.fx**2 * freq.fy**2 / freq.fabs**4
         
         for l in ls:
             for k in ks:
@@ -201,7 +203,7 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
 
                 term_1 = (freq.fx/(freq_shift.fy) + freq.fy/(freq_shift.fx))**2
                 term_2 = funcs.turb_powerspectrum_vonKarman(freq_shift, p, L0=L0, l0=l0)
-                mult = term_1 * term_2 *  freq.fx**2 * freq.fy**2 / freq.fabs**4
+                mult = term_1 * term_2 * term_0
                 mult[...,midpt_x,midpt_y] = 0.
                 if l == 0:
                     mult[...,midpt_x,:] = term_2[...,midpt_x,:]

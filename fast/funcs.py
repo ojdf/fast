@@ -257,8 +257,21 @@ def make_phase_subharm(rand, freq, N, dx, double=False):
     else:
         return phs_lo.real
     
-def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
+def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss', Ny=None):
+
     circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
+
+    if Ny != None:
+        Nx = N
+        assert ((Ny-Nx)%2)==0, f"(Nx-Ny)/2 must be even"
+        if Ny > Nx:
+            Npad = (Ny - Nx)//2
+            circ_ap = numpy.pad(circ_ap, [(0,0),(Npad,Npad)])
+        if Ny < Nx:
+            Ncut = (Nx - Ny)//2
+            circ_ap = circ_ap[:,Ncut:-Ncut]
+    else:
+        Nx = Ny = N
 
     if ptype == 'circ':
         return circ_ap / numpy.sqrt(circ_ap.sum()*dx**2)
@@ -270,13 +283,14 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
             return g * circ_ap, opt
         else:
             I0 = 2 / (numpy.pi * W0**2)
-            return gaussian2d(N, W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
+            return gaussian2d((Nx, Ny), W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
 
     elif ptype == 'axicon':
         if W0 == "opt":
             raise TypeError("Using 'axicon' and W0='opt' not supported, please set a value for W0")
-        x = numpy.arange(-N/2, N/2, 1) * dx
-        xx, yy = numpy.meshgrid(x,x)
+        x = numpy.arange(-Nx/2, Nx/2, 1) * dx
+        y = numpy.arange(-Ny/2, Ny/2, 1) * dx
+        xx, yy = numpy.meshgrid(x,y)
         r = numpy.sqrt(xx**2 + yy**2)
         if Raxicon == None:
             midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
@@ -299,16 +313,16 @@ def pupil_filter(freq, pupil, spline=False):
         return P
 
 def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
-    N = pupil.shape[-1]
+    Nx, Ny = pupil.shape
 
     if size_max is None:
-        size_max = N * dx
+        size_max = max(Ny,Nx) * dx
 
     if size_min is None:
         size_min = dx
 
     def _opt_func(W):
-        return coupling_loss(W, N, pupil, dx)
+        return coupling_loss(W, (Nx, Ny), pupil, dx)
 
     opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
 
@@ -321,7 +335,7 @@ def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
         if abs(opt) < dx:
             raise Exception("Cannot optimise gaussian mode, try changing DX?")
 
-    g = gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
+    g = gaussian2d((Nx,Ny), opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
 
     if return_size:
         return g, numpy.abs(opt)
