@@ -290,7 +290,7 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss', Ny
             raise TypeError("Using 'axicon' and W0='opt' not supported, please set a value for W0")
         x = numpy.arange(-Nx/2, Nx/2, 1) * dx
         y = numpy.arange(-Ny/2, Ny/2, 1) * dx
-        xx, yy = numpy.meshgrid(x,y)
+        xx, yy = numpy.meshgrid(y,x)
         r = numpy.sqrt(xx**2 + yy**2)
         if Raxicon == None:
             midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
