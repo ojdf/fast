@@ -256,10 +256,11 @@ def make_phase_subharm(rand, freq, N, dx, double=False):
         return numpy.vstack([phs_lo.real, phs_lo.imag]) 
     else:
         return phs_lo.real
-    
-def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss', Ny=None):
 
-    circ_ap = circle(Tx/dx/2, N) - circle(Tx_obsc/dx/2, N)
+
+def compute_pupil(N, dx, D, obsc=0, Ny=None):
+
+    circ_ap = circle(D/dx/2, N) - circle(obsc/dx/2, N)
 
     if Ny != None:
         Nx = N
@@ -273,17 +274,20 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss', Ny
     else:
         Nx = Ny = N
 
-    if ptype == 'circ':
-        return circ_ap / numpy.sqrt(circ_ap.sum()*dx**2)
+    return circ_ap / numpy.sqrt(circ_ap.sum()*dx**2)
 
-    elif ptype == 'gauss':
+
+def compute_gaussian_mode(pupil, dx, W0=None, D=None, obsc=None, ptype='gauss'):
+    Nx, Ny = pupil.shape
+
+    if ptype == 'gauss':
         if W0 == "opt":
-            g, opt = optimize_fibre(circ_ap, dx, return_size=True)
+            g, opt = optimize_fibre(pupil, dx, return_size=True)
             logger.debug(f"Optimised gaussian size: {opt}")
-            return g * circ_ap, opt
+            return g, opt
         else:
             I0 = 2 / (numpy.pi * W0**2)
-            return gaussian2d((Nx, Ny), W0/dx/numpy.sqrt(2)) * circ_ap * numpy.sqrt(I0)
+            return gaussian2d((Nx, Ny), W0/dx/numpy.sqrt(2)) * numpy.sqrt(I0), W0
 
     elif ptype == 'axicon':
         if W0 == "opt":
@@ -292,16 +296,14 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss', Ny
         y = numpy.arange(-Ny/2, Ny/2, 1) * dx
         xx, yy = numpy.meshgrid(y,x)
         r = numpy.sqrt(xx**2 + yy**2)
-        if Raxicon == None:
-            midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
-        else:
-            midpt = Raxicon
+        midpt = obsc/2 + (D/2-obsc/2)/2
         ring = numpy.exp(-(r - midpt)**2 / W0**2) 
         P = (ring**2).sum() * dx**2 
-        return ring * circ_ap / numpy.sqrt(P)
+        return ring / numpy.sqrt(P), W0
 
     else:
-        raise Exception('ptype must be one of "circ", "gauss" or "axicon"')
+        raise Exception('ptype must be one of "gauss" or "axicon"')
+
 
 def pupil_filter(freq, pupil, spline=False):
     P = numpy.abs(fouriertransform.ft2(pupil, 1))**2
