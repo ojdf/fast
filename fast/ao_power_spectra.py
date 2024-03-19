@@ -355,3 +355,57 @@ def G_AO_PAOLA_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloo
     F_AS = F_AS_top/F_AS_bottom
 
     return F_AS
+
+def compute_MMSE_reconstructor(freq, h, cn2, dtheta, wvl, phaseonly=False):
+    '''
+    Fourier domain implementation of Lognone et al 2023 (https://doi.org/10.1364/OE.476328)
+    '''
+    lambdas = (cn2/cn2.sum())[...,numpy.newaxis,numpy.newaxis]
+
+    if freq.freq_per_layer:
+        fx_tile = freq.fx
+        fy_tile = freq.fy
+        fabs_tile = freq.fabs
+    else:
+        fx_tile = numpy.tile(freq.fx, (len(h),*[1]*freq.fx.ndim))
+        fy_tile = numpy.tile(freq.fy, (len(h),*[1]*freq.fy.ndim))
+        fabs_tile = numpy.tile(freq.fabs, (len(h),*[1]*freq.fabs.ndim))
+
+    delta_r_theta = (numpy.tile(dtheta, (len(h),1)).T / 206265. * h ).T
+
+    delta_r_dot_kappa = (fx_tile.T * delta_r_theta[:,0] + fy_tile.T * delta_r_theta[:,1]).T
+
+    exp_term = numpy.exp(-1j * delta_r_dot_kappa)
+    cos_term = numpy.cos(wvl * h[...,numpy.newaxis,numpy.newaxis] * fabs_tile**2 / (4*numpy.pi))
+
+    if phaseonly:
+
+        R = (lambdas * exp_term * cos_term**2).sum(0)
+        
+        return R
+
+    sin_term = numpy.sin(wvl * h[...,numpy.newaxis,numpy.newaxis] * fabs_tile**2 / (4*numpy.pi))
+
+    Gamma_phiphi_0 = (lambdas * cos_term**2).sum(0)
+    Gamma_phichi_0 = (lambdas * cos_term * sin_term).sum(0)
+    Gamma_chichi_0 = (lambdas * sin_term**2).sum(0)
+
+    Gamma_phiphi_theta = (lambdas * cos_term**2 * exp_term).sum(0)
+    Gamma_phichi_theta = (lambdas * cos_term * sin_term * exp_term).sum(0)
+
+    Gamma_phiy_theta = numpy.array([Gamma_phiphi_theta, Gamma_phichi_theta]).reshape(2,-1)
+    Gamma_yy_0 = numpy.array([[Gamma_phiphi_0, Gamma_phichi_0], [Gamma_phichi_0, Gamma_chichi_0]]).reshape(2,2,-1)
+
+    # filter out zero frequencies as these cannot be inverted 
+    zero_mask = (freq.fabs == 0).flatten()
+    zero_loc = numpy.where(zero_mask == True)
+    Gamma_phiy_theta = Gamma_phiy_theta[...,numpy.invert(zero_mask)]
+    Gamma_yy_0 = Gamma_yy_0[...,numpy.invert(zero_mask)]
+
+    Gamma_yy_0_inv = numpy.linalg.inv(Gamma_yy_0.T).T
+    return Gamma_yy_0_inv, Gamma_phiy_theta
+    R = Gamma_phiy_theta.T.dot(Gamma_yy_0_inv.T).T
+
+    # put the f=0 location back in with value of 0
+    
+    return R 
