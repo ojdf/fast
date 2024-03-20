@@ -725,7 +725,8 @@ class Fast():
         '''
         logger.info("Computing mean irradiance/coupled flux")
 
-        pupil = self.pupil * self.pupil_mode
+        pupil = numpy.zeros(self.powerspec.shape)
+        pupil[:self.pupil.shape[0], :self.pupil.shape[1]] = self.pupil * self.pupil_mode
 
         phs_otf = fouriertransform.ift2(self.powerspec, self.freq.df)
         phs_sf = phs_otf[phs_otf.shape[0]//2, phs_otf.shape[1]//2] - phs_otf

@@ -42,6 +42,11 @@ def test_sim_default():
     assert numpy.isfinite(sim.result.dB_rel).all()
     assert numpy.isfinite(sim.result.dB_abs).all()
 
+def test_sim_mean_irradiance():
+    sim = fast.Fast("test/test_params.py")
+    psf = sim.compute_mean_irradiance()
+    assert numpy.isfinite(psf.all())
+
 @pytest.mark.skipif(not fast.fast._pyfftw, reason="No pyfftw installed")
 def test_sim_fftw():
     ptmp = p.copy()
