@@ -332,45 +332,58 @@ class Fast():
         self.dx_sat = self.D_sat/32
 
 
-        if self.params['PROP_DIR'] == 'up':
-            # Gaussian aperture at ground
-            if self.params['AXICON']:
-                ptype = 'axicon'
-            else:
-                ptype = 'gauss'
+        # if self.params['PROP_DIR'] == 'up':
+        #     # Gaussian aperture at ground
+        #     if self.params['AXICON']:
+        #         ptype = 'axicon'
+        #     else:
+        #         ptype = 'gauss'
 
-            puptmp = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
-                self.W0, self.obsc_ground, ptype=ptype)
+        #     puptmp = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
+        #         self.W0, self.obsc_ground, ptype=ptype)
             
-            if self.W0 == "opt":
-                self.pupil, self.W0 = puptmp
-            else:
-                self.pupil = puptmp
+        #     if self.W0 == "opt":
+        #         self.pupil, self.W0 = puptmp
+        #     else:
+        #         self.pupil = puptmp
 
-            # Circ aperture at satellite
-            self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat,
-                Tx_obsc=self.obsc_sat, ptype='circ') 
+        #     # Circ aperture at satellite
+        #     self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat,
+        #         Tx_obsc=self.obsc_sat, ptype='circ') 
 
-        else:
-            ptype = 'circ'
-            # Circular (fully illuminated) aperture at ground
-            self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
-                Tx_obsc=self.obsc_ground, ptype=ptype)
+        # else:
+        #     ptype = 'circ'
+        #     # Circular (fully illuminated) aperture at ground
+        #     self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
+        #         Tx_obsc=self.obsc_ground, ptype=ptype)
 
-            # Gaussian aperture at satellite (NOTE hard coded 32 pxls)
-            pupsattmp = funcs.compute_pupil(32, self.dx_sat, self.D_sat, 
-                W0=self.W0, Tx_obsc=self.obsc_sat, ptype='gauss')
+        #     # Gaussian aperture at satellite (NOTE hard coded 32 pxls)
+        #     pupsattmp = funcs.compute_pupil(32, self.dx_sat, self.D_sat, 
+        #         W0=self.W0, Tx_obsc=self.obsc_sat, ptype='gauss')
             
-            if self.W0 == "opt":
-                self.pupil_sat, self.W0 = pupsattmp
-            else:
-                self.pupil_sat = pupsattmp
+        #     if self.W0 == "opt":
+        #         self.pupil_sat, self.W0 = pupsattmp
+        #     else:
+        #         self.pupil_sat = pupsattmp
+
+        ptype = 'gauss'
+        if self.params['AXICON']:
+            ptype = 'axicon'
+
+        self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, self.obsc_ground)
+        self.pupil_sat = funcs.compute_pupil(32, self.dx_sat, self.D_sat, self.obsc_sat)
+        
+        self.pupil_mode, self.W0 = funcs.compute_gaussian_mode(self.pupil, self.dx, self.W0, D=self.D_ground, 
+                                                      obsc=self.obsc_ground, ptype=ptype)
+        self.pupil_mode_sat, self.W0_sat = funcs.compute_gaussian_mode(self.pupil_sat, self.dx_sat, "opt", ptype="gauss")
+
 
         self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
 
         # Cut out only the actual pupil 
         self.pup_coords = numpy.array((numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2), numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2))).astype(int)
         self.pupil = self.pupil[self.pup_coords[0],:][:,self.pup_coords[1]]
+        self.pupil_mode = self.pupil_mode[self.pup_coords[0],:][:,self.pup_coords[1]]
 
         if self.temporal:
             # compute high-res pupil filter spline for later integration
@@ -380,20 +393,19 @@ class Fast():
             dx_req = numpy.pi / f_max
             N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
     
-            pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground,
-                self.W0, Tx_obsc=self.obsc_ground, ptype=ptype, Ny=2*self.Npxls_pup)
+            pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground, self.obsc_ground, Ny=2*self.Npxls_pup)
             self.freq.make_logamp_freqs(Nx=N_req, dx=dx_req, Ny=2*self.Npxls_pup, dy=self.dx)
             self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal, spline=True)
 
-        self.smf = self.params['SMF']
-        self.fibre_efield = 1.
-        self.fibre_efield_sat = 1.
-        if self.smf:
-            # compute optimal SMF parameters at Rx
-            if self.params['PROP_DIR'] == "up":
-                self.fibre_efield_sat = funcs.optimize_fibre(self.pupil_sat, self.dx_sat)
-            else:
-                self.fibre_efield = funcs.optimize_fibre(self.pupil, self.dx)
+        # self.smf = self.params['SMF']
+        # self.fibre_efield = 1.
+        # self.fibre_efield_sat = 1.
+        # if self.smf:
+        #     # compute optimal SMF parameters at Rx
+        #     if self.params['PROP_DIR'] == "up":
+        #         self.fibre_efield_sat = funcs.optimize_fibre(self.pupil_sat, self.dx_sat)
+        #     else:
+        #         self.fibre_efield = funcs.optimize_fibre(self.pupil, self.dx)
 
         return self.pupil
 
@@ -627,7 +639,7 @@ class Fast():
 
     def compute_detector(self, chunk=0):
 
-        pupil = self.pupil * self.fibre_efield
+        pupil = self.pupil * self.pupil_mode
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
         logamp_component = numpy.exp(2*self.logamp[chunk*self.Niter_per_chunk:(chunk+1)*self.Niter_per_chunk])
@@ -669,7 +681,7 @@ class Fast():
             D_r = self.D_sat
             obsc_t = self.obsc_ground
             obsc_r = self.obsc_sat
-            fib_efield = self.fibre_efield_sat
+            mode = self.pupil_mode_sat
             dx_t = self.dx
             dx_r = self.dx_sat
             pupil_t = self.pupil
@@ -679,7 +691,7 @@ class Fast():
             D_r = self.D_ground
             obsc_t = self.obsc_sat
             obsc_r = self.obsc_ground
-            fib_efield = self.fibre_efield
+            mode = self.pupil_mode
             dx_t = self.dx_sat
             dx_r = self.dx
             pupil_t = self.pupil_sat
@@ -700,9 +712,8 @@ class Fast():
 
         self.link_budget['transmission_loss'] = 10*numpy.log10(self.params['TRANSMISSION'])
 
-        if self.smf:
-            smf_coupling = 10*numpy.log10(((pupil_r * fib_efield).sum() * dx_r**2)**2)
-            self.link_budget['smf_coupling'] = smf_coupling
+        smf_coupling = 10*numpy.log10(((pupil_r * mode).sum() * dx_r**2)**2)
+        self.link_budget['smf_coupling'] = smf_coupling
 
         self.diffraction_limit = 10**(sum(self.link_budget.values())/10) / 1e3 # W
 
@@ -714,7 +725,8 @@ class Fast():
         '''
         logger.info("Computing mean irradiance/coupled flux")
 
-        pupil = self.pupil * self.fibre_efield
+        pupil = numpy.zeros(self.powerspec.shape)
+        pupil[:self.pupil.shape[0], :self.pupil.shape[1]] = self.pupil * self.pupil_mode
 
         phs_otf = fouriertransform.ift2(self.powerspec, self.freq.df)
         phs_sf = phs_otf[phs_otf.shape[0]//2, phs_otf.shape[1]//2] - phs_otf
