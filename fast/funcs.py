@@ -284,10 +284,10 @@ def compute_gaussian_mode(pupil, dx, W0=None, D=None, obsc=None, ptype='gauss'):
         if W0 == "opt":
             g, opt = optimize_fibre(pupil, dx, return_size=True)
             logger.debug(f"Optimised gaussian size: {opt}")
-            return g, opt
+            return g / pupil.max(), opt
         else:
             I0 = 2 / (numpy.pi * W0**2)
-            return gaussian2d((Nx, Ny), W0/dx/numpy.sqrt(2)) * numpy.sqrt(I0), W0
+            return gaussian2d((Nx, Ny), W0/dx/numpy.sqrt(2)) * numpy.sqrt(I0) / pupil.max(), W0
 
     elif ptype == 'axicon':
         if W0 == "opt":
@@ -299,7 +299,7 @@ def compute_gaussian_mode(pupil, dx, W0=None, D=None, obsc=None, ptype='gauss'):
         midpt = obsc/2 + (D/2-obsc/2)/2
         ring = numpy.exp(-(r - midpt)**2 / W0**2) 
         P = (ring**2).sum() * dx**2 
-        return ring / numpy.sqrt(P), W0
+        return ring / numpy.sqrt(P) / pupil.max(), W0
 
     else:
         raise Exception('ptype must be one of "gauss" or "axicon"')
