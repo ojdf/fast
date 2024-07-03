@@ -16,7 +16,7 @@ class ConfigParser():
 
     Parameters:
         arg (str or FastConfig): Either a file name of the config file, or a previously 
-            created FastConfig object 
+            created FastConfig object, or a dict with config values
     """
     def __init__(self, arg):
         
@@ -24,7 +24,7 @@ class ConfigParser():
         self.config = FastConfig()
         self.init_params()
 
-        if type(arg) == FastConfig:
+        if isinstance(arg, (FastConfig, dict)):
             for key in arg:
                 self.config[key] = arg[key]
             self.fname = None
@@ -152,55 +152,56 @@ class FastParam():
 
 # Master list of all FAST params, including default values, bounds, allowed values, etc.
 PARAMS = [
-    FastParam("NPXLS", "auto", "sim", bounds=[0,None], allowed_values=["auto"]),
-    FastParam("DX", "auto", "sim", bounds=[0,None], allowed_values=["auto"], unit="m/pixel"),
-    FastParam("NITER", 1000, "sim", bounds=[0,None]), 
-    FastParam("SUBHARM", False, "sim"),
-    FastParam("FFTW", False, "sim"),
-    FastParam("FFTW_THREADS", 1, "sim", bounds=[0,None]), 
-    FastParam("NCHUNKS", 10, "sim", bounds=[0,None]),
-    FastParam("TEMPORAL", False, "sim"), 
-    FastParam("DT", 0.001, "sim", bounds=[0,None], unit="s"), 
-    FastParam("LOGFILE", None, "sim", allowed_values=[None, "*"]),
-    FastParam("LOGLEVEL", "INFO", "sim", allowed_values=["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    FastParam("SEED", None, "sim", allowed_values=[None]),
+    FastParam("NPXLS", "auto", "Simulation", bounds=[0,None], allowed_values=["auto"]),
+    FastParam("DX", "auto", "Simulation", bounds=[0,None], allowed_values=["auto"], unit="m/pixel"),
+    FastParam("NITER", 1000, "Simulation", bounds=[0,None]), 
+    FastParam("NCHUNKS", 10, "Simulation", bounds=[0,None]),
+    FastParam("SUBHARM", False, "Simulation"),
+    FastParam("FFTW", False, "Simulation"),
+    FastParam("FFTW_THREADS", 1, "Simulation", bounds=[0,None]), 
+    FastParam("TEMPORAL", False, "Simulation"), 
+    FastParam("DT", 0.001, "Simulation", bounds=[0,None], unit="s"), 
+    FastParam("LOGFILE", None, "Simulation", allowed_values=[None, "*"]),
+    FastParam("LOGLEVEL", "INFO", "Simulation", allowed_values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    FastParam("SEED", None, "Simulation", allowed_values=[None]),
     
-    FastParam("W0", "opt", "ground", bounds=[0,None], allowed_values=["opt"], unit="m"),
-    FastParam("D_GROUND", 1.0, "ground", bounds=[0,None], unit="m"),
-    FastParam("OBSC_GROUND", 0.0, "ground", bounds=[0,None], unit="m"),
-    FastParam("D_SAT", 0.1, "sat", bounds=[0,None], unit="m"),
-    FastParam("OBSC_SAT", 0, "sat", bounds=[0,None], unit="m"),
-    FastParam("WVL", 1550e-9, "rx/tx", bounds=[0,None], unit="m"),
-    FastParam("AXICON", False, "ground"),
-    FastParam("POWER", 1, "tx", bounds=[0,None], unit="Watts"),
-    FastParam("SMF", True, "rx"),
+    FastParam("W0", "opt", "Ground", bounds=[0,None], allowed_values=["opt"], unit="m"),
+    FastParam("D_GROUND", 1.0, "Ground", bounds=[0,None], unit="m"),
+    FastParam("OBSC_GROUND", 0.0, "Ground", bounds=[0,None], unit="m"),
+    FastParam("AXICON", False, "Ground"),
+    FastParam("D_SAT", 0.1, "Satellite", bounds=[0,None], unit="m"),
+    FastParam("OBSC_SAT", 0, "Satellite", bounds=[0,None], unit="m"),
+    FastParam("H_SAT", 36e6, "Satellite", bounds=[0,None], allowed_values=[None], unit="m"),
+    FastParam("L_SAT", None, "Satellite", bounds=[0,None], allowed_values=[None], unit="m"), 
+    FastParam("POWER", 1, "Tx/Rx", bounds=[0,None], unit="Watts"),
+    FastParam("SMF", True, "Tx/Rx"),
 
-    FastParam("H_SAT", 36e6, "sat", bounds=[0,None], allowed_values=[None], unit="m"),
-    FastParam("L_SAT", None, "sat", bounds=[0,None], allowed_values=[None], unit="m"), 
-    FastParam("H_TURB", numpy.array([0,10e3]), "turb", bounds=[0,None], unit="m"),
-    FastParam("CN2_TURB", numpy.array([100e-15, 100e-15]), "turb", bounds=[0,None], unit="m^1/3"),
-    FastParam("WIND_SPD", numpy.array([10,10]), "turb", bounds=[0,None], unit="m/s"),
-    FastParam("WIND_DIR", numpy.array([90,0]), "turb", unit="degrees"),
-    FastParam("L0", numpy.inf, "turb", bounds=[0,None], unit="m"),
-    FastParam("l0", 1e-6, "turb", bounds=[0,None], unit="m"),
-    FastParam("ZENITH_ANGLE", 0, "turb", bounds=[0,90], unit="degrees"),
-    FastParam("PROP_DIR", "up", "link", allowed_values=["up", "down"]),
-    FastParam("DTHETA", [4,0], "linK", required_len=2, unit="arcseconds"),
-    FastParam("TRANSMISSION", 1, "link", bounds=[0,1]),
+    FastParam("WVL", 1550e-9, "Link", bounds=[0,None], unit="m"),
+    FastParam("PROP_DIR", "up", "Link", allowed_values=["up", "down"]),
+    FastParam("DTHETA", [4,0], "Link", required_len=2, unit="arcseconds"),
+    FastParam("TRANSMISSION", 1, "Link", bounds=[0,1]),
 
-    FastParam("AO_MODE", "AO", "ao", allowed_values=["NOAO", "AO", "TT", "LGSAO"]),
-    FastParam("DSUBAP", 0.1, "ao", bounds=[0,None], unit="m"),
-    FastParam("TLOOP", 0.001, "ao", bounds=[0,None], unit="s"), 
-    FastParam("TEXP", 0.001, "ao", bounds=[0,None], unit="s"),
-    FastParam("ALIAS", True, "ao"),
-    FastParam("NOISE", 0.0, "ao", bounds=[0,None], unit="?"), 
-    FastParam("MODAL", False, "ao"),
-    FastParam("MODAL_MULT", 1, "ao", bounds=[0,None]),
-    FastParam("ZMAX", None, "ao", bounds=[1,None], allowed_values=[None]),
+    FastParam("H_TURB", numpy.array([0,10e3]), "Turbulence", bounds=[0,None], unit="m"),
+    FastParam("CN2_TURB", numpy.array([100e-15, 100e-15]), "Turbulence", bounds=[0,None], unit="m^1/3"),
+    FastParam("WIND_SPD", numpy.array([10,10]), "Turbulence", bounds=[0,None], unit="m/s"),
+    FastParam("WIND_DIR", numpy.array([90,0]), "Turbulence", unit="degrees"),
+    FastParam("L0", numpy.inf, "Turbulence", bounds=[0,None], unit="m"),
+    FastParam("l0", 1e-6, "Turbulence", bounds=[0,None], unit="m"),
+    FastParam("ZENITH_ANGLE", 0, "Turbulence", bounds=[0,90], unit="degrees"),
 
-    FastParam("COHERENT", False, "comms"),
-    FastParam("MODULATION", None, "comms", allowed_values=[None, "OOK", "BPSK", "QAM", "QPSK", "*"]),
-    FastParam("EsN0", None, "comms", allowed_values=[None], unit="dB")
+    FastParam("AO_MODE", "AO", "AO", allowed_values=["NOAO", "AO", "TT", "LGSAO"]),
+    FastParam("DSUBAP", 0.1, "AO", bounds=[0,None], unit="m"),
+    FastParam("TLOOP", 0.001, "AO", bounds=[0,None], unit="s"), 
+    FastParam("TEXP", 0.001, "AO", bounds=[0,None], unit="s"),
+    FastParam("ALIAS", True, "AO"),
+    FastParam("NOISE", 0.0, "AO", bounds=[0,None], unit="?"), 
+    FastParam("MODAL", False, "AO"),
+    FastParam("MODAL_MULT", 1, "AO", bounds=[0,None]),
+    FastParam("ZMAX", None, "AO", bounds=[1,None], allowed_values=[None]),
+
+    FastParam("COHERENT", False, "Comms"),
+    FastParam("MODULATION", None, "Comms", allowed_values=[None, "OOK", "BPSK", "QAM", "QPSK", "*"]),
+    FastParam("EsN0", None, "Comms", allowed_values=[None], unit="dB")
 ]
 
 # Default values for all parameters. Each entry contains 
