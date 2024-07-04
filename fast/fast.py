@@ -686,6 +686,7 @@ class Fast():
             dx_r = self.dx_sat
             pupil_t = self.pupil
             pupil_r = self.pupil_sat
+            w0 = self.W0
         else:
             D_t = self.D_sat
             D_r = self.D_ground
@@ -696,6 +697,7 @@ class Fast():
             dx_r = self.dx
             pupil_t = self.pupil_sat
             pupil_r = self.pupil
+            w0 = self.W0_sat
 
         self.link_budget = {}
 
@@ -703,7 +705,12 @@ class Fast():
 
         self.link_budget['free_space'] = 10*numpy.log10((self.wvl/(4*numpy.pi*self.L))**2)
 
-        G_t = 10*numpy.log10((pupil_t.sum() * dx_t**2)**2 * 4*numpy.pi / self.wvl**2)
+        # eq 9, Klein et al Applied Optics 1974
+        # TODO: make this work for axicon (bessel) beams
+        alpha = D_t / w0
+        gamma = obsc_t / D_t
+        g_t = 2/alpha**2 * (numpy.exp(-alpha**2) - numpy.exp(-gamma**2 * alpha**2))**2
+        G_t = 10*numpy.log10((numpy.pi * D_t**2) * 4*numpy.pi / self.wvl**2 * g_t)
         self.link_budget['transmitter_gain'] = G_t
 
         A = numpy.pi * ((D_r/2)**2 - (obsc_r/2)**2)
