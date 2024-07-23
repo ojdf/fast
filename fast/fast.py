@@ -175,7 +175,7 @@ class Fast():
             nyq_Npxls = int(2*numpy.ceil(2*numpy.pi/(nyq * self.dx)/2)) # ensure even
 
             # Make sure enough pixels so aperture is not clipped!
-            ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2))
+            ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2)) + 2 
             
             if self.params['AO_MODE'] == 'NOAO' and not numpy.isinf(self.params['L0']):
                 # Choose number of pixels so that the phase screen is 2x outer scale
