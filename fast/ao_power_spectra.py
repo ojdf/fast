@@ -66,12 +66,13 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
                 out += z * numpy.conjugate(z1)
             else:
                 out += numpy.abs(z)**2
-        mid = int(fabs.shape[-1]/2)
+        mid1 = int(fabs.shape[-1]/2)
+        mid2 = int(fabs.shape[-2]/2)
 
         if n_noll_start == 1:
-            out[...,mid, mid] = 1
+            out[...,mid2, mid1] = 1
         else:
-            out[...,mid,mid] = 0
+            out[...,mid2,mid1] = 0
         return out
 
     else:
