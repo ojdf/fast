@@ -1,0 +1,50 @@
+fast.conf
+=========
+
+.. py:module:: fast.conf
+
+.. autoapi-nested-parse::
+
+   Needs to read in python/YAML file and spit out a dictionary, taking into account 
+   default values for certain parameters.
+
+
+
+
+
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ConfigParser(fname_or_dict)
+
+   .. py:attribute:: defaults
+
+
+   .. py:method:: load(fname)
+
+      Load config file into dictionary
+
+      Parameters:
+          fname (string): config file location
+
+
+
+   .. py:method:: check()
+
+      Check loaded config dictionary for missing values. If they exist, replace 
+      with defualt values
+
+
+
+   .. py:method:: set_defaults()
+
+      Set defualt values for all config parameters from global DEFAULTS dictionary
+
+
+
+.. py:data:: DEFAULTS
+
