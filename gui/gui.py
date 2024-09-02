@@ -2,7 +2,7 @@ from nicegui import events, ui
 import fast
 import numpy
 
-CONFIG = None
+CONFIG = fast.conf.PARAMS
 CATEGORIES = list(dict.fromkeys([i._category for i in fast.conf.PARAMS]).keys())
 ELEMENTS = {}
 
@@ -10,8 +10,10 @@ ELEMENTS = {}
 def load_config(e: events.UploadEventArguments):
     content = e.content.read().decode()
     exec(content, locals())
-    CONFIG = fast.conf.ConfigParser(locals()['p']).config
-    print(CONFIG)
+    c = fast.conf.ConfigParser(locals()['p']).config
+    
+    for param in c:
+        CONFIG[param] = c[param]
 
 
 def add_number_box_bounds(param):
@@ -107,9 +109,38 @@ def add_param(param):
         return elements
     
 
-def handle_change(e, param):
+def handle_change(e, param, elems):
     print(e, param)
+    s = e.sender
 
+    value = e.value
+
+    # different rules for checkboxes
+    if type(s) == ui.checkbox:
+        if e.value:
+            # if checked, set number value to None
+            value = s.text
+            if value == "None":
+                value = None
+            elems[0].set_value(None)
+        else:
+            # if unchecked, force number value to be entered (is this possible?)
+            elems[0].run_method("focus")
+
+    try:
+        param.value = value
+        s.clear()
+    except ValueError as err:
+        with s:
+            ui.tooltip(err.args[0]).classes("bg-red")
+
+    print(param)
+
+def init_sim():
+    sim = fast.Fast(CONFIG)
+    return sim
+
+ui.label(f"FAST {fast.__version__}").classes("font-mono text-4xl")
 
 with ui.tabs().classes("w-full") as tabs:
     config_tab = ui.tab("Configuration")
@@ -131,18 +162,19 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
 
                         ui.label(c)
 
-                        for param in fast.conf.PARAMS:
+                        for param in CONFIG:
 
                             if param._category == c:
 
                                 elems = add_param(param)
                                 ELEMENTS[param.name] = elems
                                 for elem in elems:
-                                    elem.on_value_change(lambda e, param=param: handle_change(e, param))
+                                    elem.on_value_change(lambda e, param=param, 
+                                                         elems=elems: handle_change(e, param, elems))
 
 
     with ui.tab_panel(sim_tab):
-        ui.label("Simulation")
+        ui.button("Initialise", on_click=init_sim)
 
     with ui.tab_panel(results_tab):
         ui.label("Results")
