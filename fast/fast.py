@@ -204,6 +204,9 @@ class Fast():
                     logger.warning(f"Current value: {self.Npxls}")
                     logger.warning(f"Recommended value: {temporal_Npxls}")
 
+        if self.Npxls > 2048:
+            logger.warning(f"NPXLS is large ({self.Npxls}) and may cause very high memory usage")
+
         self.Npxls_pup = int(numpy.ceil(self.D_ground/self.dx)) + 2
 
         self.freq = SpatialFrequencies(self.Npxls, self.dx)
@@ -378,7 +381,7 @@ class Fast():
         self.pupil_mode_sat, self.W0_sat = funcs.compute_gaussian_mode(self.pupil_sat, self.dx_sat, "opt", ptype="gauss")
 
 
-        self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil, spline=False)
+        self.pupil_filter = funcs.pupil_filter(self.freq.main, self.pupil * self.pupil_mode, spline=False)
 
         # Cut out only the actual pupil 
         self.pup_coords = numpy.array((numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2), numpy.arange((self.Npxls-self.Npxls_pup)//2,(self.Npxls+self.Npxls_pup)//2))).astype(int)
@@ -394,8 +397,9 @@ class Fast():
             N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
     
             pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground, self.obsc_ground, Ny=2*self.Npxls_pup)
+            mode_temporal, _ = funcs.compute_gaussian_mode(pupil_temporal, dx_req, W0=self.W0, ptype="gauss")
             self.freq.make_logamp_freqs(Nx=N_req, dx=dx_req, Ny=2*self.Npxls_pup, dy=self.dx)
-            self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal, spline=True)
+            self.pupil_filter_temporal = funcs.pupil_filter(self.freq.logamp, pupil_temporal * mode_temporal, spline=True)
 
         # self.smf = self.params['SMF']
         # self.fibre_efield = 1.
