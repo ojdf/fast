@@ -1,0 +1,21 @@
+fast
+====
+
+.. py:module:: fast
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/fast/ao_power_spectra/index
+   /autoapi/fast/comms/index
+   /autoapi/fast/complete_orbit_simulation/index
+   /autoapi/fast/conf/index
+   /autoapi/fast/fast/index
+   /autoapi/fast/funcs/index
+   /autoapi/fast/turbulence_models/index
+
+
