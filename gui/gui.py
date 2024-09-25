@@ -2,9 +2,10 @@ from nicegui import events, ui
 import fast
 import numpy
 
-CONFIG = fast.conf.PARAMS
+CONFIG = {}
 CATEGORIES = list(dict.fromkeys([i._category for i in fast.conf.PARAMS]).keys())
 ELEMENTS = {}
+SIM = None
 
 
 def load_config(e: events.UploadEventArguments):
@@ -13,7 +14,8 @@ def load_config(e: events.UploadEventArguments):
     c = fast.conf.ConfigParser(locals()['p']).config
     
     for param in c:
-        CONFIG[param] = c[param]
+        CONFIG[param].value = c[param]
+        change_value(CONFIG[param], c[param], ELEMENTS[param])
 
 
 def add_number_box_bounds(param):
@@ -109,11 +111,32 @@ def add_param(param):
         return elements
     
 
+def change_value(param, value, elems):
+    
+    if value in ["auto" or "opt"] or numpy.isinf(value) or value is None:
+        elems[0].set_value(None)
+        elems[1].set_value(True)
+    
+    elif value in [True, False] or isinstance(value, str):
+        elems[0].set_value(value)
+
+    elif isinstance(value, numpy.ndarray):
+        for elem, val in zip(elems, value):
+            elem.set_value(val)
+
+    
+
+
 def handle_change(e, param, elems):
     print(e, param)
     s = e.sender
 
     value = e.value
+
+    # convert to int for certain values
+    if param.name in ["NPXLS", "NITER", "NCHUNKS", "FFTW_THREADS", "SEED"]:
+        if type(value) is float:
+            value = int(value)
 
     # different rules for checkboxes
     if type(s) == ui.checkbox:
@@ -137,8 +160,15 @@ def handle_change(e, param, elems):
     print(param)
 
 def init_sim():
-    sim = fast.Fast(CONFIG)
-    return sim
+    try:
+        SIM = fast.Fast(fast.conf.FastConfig(CONFIG))
+    except Exception as e:
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Error in initialising simulation:")
+            ui.label(e.args[0])
+            ui.button('Close', on_click=dialog.close)
+        dialog.open()
+
 
 ui.label(f"FAST {fast.__version__}").classes("font-mono text-4xl")
 
@@ -151,6 +181,8 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
 
     with ui.tab_panel(config_tab):
 
+        ui.button("PRINT DEBUG", on_click=lambda x: print(CONFIG))
+
         with ui.column().classes("justify-center"):
             ui.upload(label="Load Config File", on_upload=load_config).props('accept=.py')
             
@@ -162,7 +194,9 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
 
                         ui.label(c)
 
-                        for param in CONFIG:
+                        for param in fast.conf.PARAMS:
+
+                            CONFIG[param.name] = param
 
                             if param._category == c:
 
@@ -171,7 +205,7 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
                                 for elem in elems:
                                     elem.on_value_change(lambda e, param=param, 
                                                          elems=elems: handle_change(e, param, elems))
-
+                                    
 
     with ui.tab_panel(sim_tab):
         ui.button("Initialise", on_click=init_sim)
