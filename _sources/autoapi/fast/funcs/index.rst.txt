@@ -1,0 +1,150 @@
+fast.funcs
+==========
+
+.. py:module:: fast.funcs
+
+
+
+
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: f_grid_linear(L0, l0, max_size=1024)
+
+   Spatial frequency grid with linear spacing.
+
+   Parameters
+       L0 (float): Outer scale. Defines the minimum spatial frequency
+       l0 (float): Inner scale. Defines the maximum spatial frequency, assuming
+           that it will result in an array smaller than max_size
+       max_size (int): Maximum array size, will override inner scale
+
+   Returns
+       fx (numpy.ndarray): x spatial frequencies
+       fy (numpy.ndarray): y spatial frequencies
+       fabs (numpy.ndarray): |f| = sqrt(fx**2 + fy**2)
+       f (numpy.ndarray): 1d spatial frequencies array
+
+
+.. py:function:: f_grid_dx(N, dx)
+
+   Spatial frequency grid given real-space grid spacing and size.
+
+   Parameters
+       N (int): Input array size (along one axis)
+       dx (float): Input array spacing (m/pixel)
+
+   Returns
+       fx (numpy.ndarray): x spatial frequencies
+       fy (numpy.ndarray): y spatial frequencies
+       fabs (numpy.ndarray): |f| = sqrt(fx**2 + fy**2)
+       f (numpy.ndarray): 1d spatial frequencies array
+
+
+.. py:function:: f_grid_log(L0, l0, N=129, include_0=True)
+
+   Spatial frequency grid with logarithmic spacing.
+
+   Parameters
+       L0 (float): Outer scale. Defines the minimum spatial frequency
+       l0 (float): Inner scale. Defines the maximum spatial frequency
+       N (int): Number of points along one side.
+
+   Returns
+       fx (numpy.ndarray): x spatial frequencies
+       fy (numpy.ndarray): y spatial frequencies
+       fabs (numpy.ndarray): |f| = sqrt(fx**2 + fy**2)
+       f (numpy.ndarray): 1d spatial frequencies array
+
+
+.. py:function:: integrate_powerspectrum(power_spectrum, f)
+
+   Integrate a power spectrum or cube of power spectra using simpsons rule
+   numerical integration. Integration is performed over the last two axes of
+   the input.
+
+   Parameters
+       power_spectrum (numpy.ndarray): 2D or 3D array of power spectra
+       f (numpy.ndarray): Spatial frequency axis (along one side, assumed same for
+           both axes)
+
+   Returns
+       integral (numpy.ndarray): Power spectrum integrated across final two axes
+           of the input
+
+
+.. py:function:: integrate_path(integrands, h, layer=True, axis=0)
+
+   Integrate along the path (i.e. height). Takes into account if the atmosphere
+   is using a discrete layered model with cn2 dh values or a continuous model
+   with cn2 values.
+
+   Parameters
+       integrands (numpy.ndarray): 1D array of integrated power spectra.
+       h (numpy.ndarray): Height of each layer
+       layer (bool): Whether a discrete layer model is used or not. Default is False.
+       axis (int): Axis over which to integrate
+
+   Returns
+       integral (numpy.ndarray): Integral of input array over the 0 axis
+
+
+.. py:function:: turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2 * numpy.pi)
+
+   Von Karman turbulence power spectrum of refractive index.
+
+   Parameters
+       freq (SpatialFrequencyStruct): spatial frequency object from sim
+       cn2[dh] (float / numpy.ndarray): Refractive index structure constant,
+           can be a 1d array for multiple layers. If discrete layers are used
+           then this may be considered the cn2dh value, too.
+       L0 (float): Outer scale
+       l0 (float): Inner scale
+       C (float): Multiplier for outer scale, i.e. k0=C/L0. Usually either 1 or 2pi
+
+
+.. py:function:: calc_gaussian_beam_parameters(z, F_0, W_0, wvl)
+
+   Andrews and Phillips Chapter 12 eq. 8 and 9
+
+   Parameters
+       z (float): Propagation distance
+       F_0 (float): Phase front radius of curvature at transmitter
+       W_0 (float): 1/e beam radius at transmitter
+       wvl (float): Wavelength
+
+   Returns
+       Theta_0, Lambda_0: Input plane beam parameters
+       Theta, Lambda, Theta_bar: Output plane beam parameters
+
+
+.. py:function:: pdf_lognorm(Is, sigma, Imn=1)
+
+.. py:function:: make_phase_fft(rand, df, fftw=False, fftw_objs=None, double=False)
+
+.. py:function:: make_phase_subharm(rand, freq, N, dx, double=False)
+
+.. py:function:: compute_pupil(N, dx, D, obsc=0, Ny=None)
+
+.. py:function:: compute_gaussian_mode(pupil, dx, W0=None, D=None, obsc=None, ptype='gauss')
+
+.. py:function:: pupil_filter(freq, pupil, spline=False)
+
+.. py:function:: optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False)
+
+.. py:function:: coupling_loss(W, N, pupil, dx)
+
+.. py:function:: generate_random_coefficients(shape)
+
+.. py:function:: generate_random_coefficients_logamp(Nscrns, powerspec, temporal=False, temporal_powerspecs=None)
+
+.. py:function:: temporal_autocorrelation(I)
+
+.. py:function:: l_path(h_sat, zeta)
+
+.. py:function:: calculate_wind_correction(h, theta_loop, Tloop)
+
