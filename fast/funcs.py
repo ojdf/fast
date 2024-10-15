@@ -1,6 +1,6 @@
 import numpy
 from scipy.special import erfc
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from scipy.optimize import minimize_scalar
 from scipy.ndimage import rotate, shift
 from scipy.interpolate import RectBivariateSpline
@@ -26,10 +26,10 @@ def f_grid_linear(L0, l0, max_size=1024):
 
     Parameters
         L0 (float): Outer scale. Defines the minimum spatial frequency
-        l0 (float): Inner scale. Defines the maximum spatial frequency, assuming 
+        l0 (float): Inner scale. Defines the maximum spatial frequency, assuming
             that it will result in an array smaller than max_size
-        max_size (int): Maximum array size, will override inner scale 
-        
+        max_size (int): Maximum array size, will override inner scale
+
     Returns
         fx (numpy.ndarray): x spatial frequencies
         fy (numpy.ndarray): y spatial frequencies
@@ -99,25 +99,25 @@ def f_grid_log(L0, l0, N=129, include_0=True):
 
 def integrate_powerspectrum(power_spectrum, f):
     '''
-    Integrate a power spectrum or cube of power spectra using simpsons rule 
-    numerical integration. Integration is performed over the last two axes of 
+    Integrate a power spectrum or cube of power spectra using simpsons rule
+    numerical integration. Integration is performed over the last two axes of
     the input.
 
     Parameters
         power_spectrum (numpy.ndarray): 2D or 3D array of power spectra
-        f (numpy.ndarray): Spatial frequency axis (along one side, assumed same for 
+        f (numpy.ndarray): Spatial frequency axis (along one side, assumed same for
             both axes)
-        
+
     Returns
-        integral (numpy.ndarray): Power spectrum integrated across final two axes 
+        integral (numpy.ndarray): Power spectrum integrated across final two axes
             of the input
     '''
-    return simps(simps(power_spectrum, x=f), x=f)
+    return simpson(simpson(power_spectrum, x=f), x=f)
 
 def integrate_path(integrands, h, layer=True, axis=0):
     '''
-    Integrate along the path (i.e. height). Takes into account if the atmosphere 
-    is using a discrete layered model with cn2 dh values or a continuous model 
+    Integrate along the path (i.e. height). Takes into account if the atmosphere
+    is using a discrete layered model with cn2 dh values or a continuous model
     with cn2 values.
 
     Parameters
@@ -142,7 +142,7 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     Parameters
         freq (SpatialFrequencyStruct): spatial frequency object from sim
         cn2[dh] (float / numpy.ndarray): Refractive index structure constant,
-            can be a 1d array for multiple layers. If discrete layers are used 
+            can be a 1d array for multiple layers. If discrete layers are used
             then this may be considered the cn2dh value, too.
         L0 (float): Outer scale
         l0 (float): Inner scale
@@ -153,7 +153,7 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     k0 = C / L0
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
-        
+
         try:
             nlayers = len(cn2)
             cn2 = numpy.array(cn2)
@@ -161,7 +161,7 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
                 # we have a 3d fabs array already, with an entry for each layer
                 power_spec = ((0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)).T * cn2).T
             else:
-                power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T 
+                power_spec = (numpy.array([0.033 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.)]*nlayers).T * cn2).T
         except TypeError:
             # cn2 is a single float value
             power_spec = numpy.array([0.033 * cn2 * numpy.exp(-fabs**2/km**2) / (fabs**2 + k0**2)**(11/6.) ])
@@ -170,17 +170,17 @@ def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     power_spec[numpy.isinf(power_spec)] = 0.
     # if numpy.isinf(L0) and fabs[midpt,midpt] == 0:
     #     power_spec[:,int(power_spec.shape[1]/2), int(power_spec.shape[2]/2)] = 0.
-    return power_spec 
+    return power_spec
 
 def calc_gaussian_beam_parameters(z, F_0, W_0, wvl):
     '''
     Andrews and Phillips Chapter 12 eq. 8 and 9
 
     Parameters
-        z (float): Propagation distance 
+        z (float): Propagation distance
         F_0 (float): Phase front radius of curvature at transmitter
         W_0 (float): 1/e beam radius at transmitter
-        wvl (float): Wavelength 
+        wvl (float): Wavelength
 
     Returns
         Theta_0, Lambda_0: Input plane beam parameters
@@ -250,10 +250,10 @@ def make_phase_subharm(rand, freq, N, dx, double=False):
 
         phs_lo = phs_lo + SH
 
-    phs_lo = (phs_lo.T - phs_lo.mean((1,2))).T 
+    phs_lo = (phs_lo.T - phs_lo.mean((1,2))).T
 
     if double:
-        return numpy.vstack([phs_lo.real, phs_lo.imag]) 
+        return numpy.vstack([phs_lo.real, phs_lo.imag])
     else:
         return phs_lo.real
 
@@ -297,8 +297,8 @@ def compute_gaussian_mode(pupil, dx, W0=None, D=None, obsc=None, ptype='gauss'):
         xx, yy = numpy.meshgrid(y,x)
         r = numpy.sqrt(xx**2 + yy**2)
         midpt = obsc/2 + (D/2-obsc/2)/2
-        ring = numpy.exp(-(r - midpt)**2 / W0**2) 
-        P = (ring**2).sum() * dx**2 
+        ring = numpy.exp(-(r - midpt)**2 / W0**2)
+        P = (ring**2).sum() * dx**2
         return ring / numpy.sqrt(P) / pupil.max(), W0
 
     else:
@@ -328,8 +328,8 @@ def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
 
     opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
 
-    # the optimization can fail for some (seemingly random) parameter combinations, 
-    # producing a very small value of opt. Try again but change size_max, if still 
+    # the optimization can fail for some (seemingly random) parameter combinations,
+    # producing a very small value of opt. Try again but change size_max, if still
     # doesn't work, then we are stuffed and raise an Exception.
     if abs(opt) < dx:
         logger.info("Gaussian mode optimisation failed, trying with different parameters")
@@ -350,10 +350,10 @@ def coupling_loss(W, N, pupil, dx):
     return 1 - coupling
 
 def generate_random_coefficients(shape):
-    
+
     rand = _R.normal(0,1,size=shape) + 1j * _R.normal(0,1,size=shape)
 
-    return rand 
+    return rand
 
 def generate_random_coefficients_logamp(Nscrns, powerspec,  temporal=False, temporal_powerspecs=None):
 
@@ -363,7 +363,7 @@ def generate_random_coefficients_logamp(Nscrns, powerspec,  temporal=False, temp
          + 1j * _R.normal(0,1,size=(Nscrns, *powerspec.shape))
 
         return rand * numpy.sqrt(powerspec)
-    
+
     else:
         r_fourier = _R.normal(0,1,size=(*powerspec.shape, Nscrns)) \
             + 1j * _R.normal(0,1,size=(*powerspec.shape, Nscrns))
