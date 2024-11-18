@@ -957,6 +957,10 @@ class FastResult():
     def power(self):
         return self._dl * self._r
 
+    @property
+    def scintillation_index(self):
+        return (self._r/self._r.mean()).var()
+    
 
 def load(fname):
     hdr = fits.getheader(fname)
