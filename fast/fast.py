@@ -934,6 +934,7 @@ class FastResult():
         dB_abs: results in dB including all terms in link budget (i.e. received power/launched power)
         dBm: results in dBm, including all terms in link budget
         power: results in received power, units of Watts
+        scintillation_index: scintillation index (variance of power/power.mean())
     '''
     def __init__(self, random_iters, diffraction_limit, header=None):
         self._r = random_iters
