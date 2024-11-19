@@ -1,18 +1,20 @@
 from nicegui import events, ui 
 import fast
 import numpy
+from matplotlib.colors import LogNorm
 
 CONFIG = {}
 CATEGORIES = list(dict.fromkeys([i._category for i in fast.conf.PARAMS]).keys())
 ELEMENTS = {}
 SIM = None
 
-
-def load_config(e: events.UploadEventArguments):
+def load_config_handler(e: events.UploadEventArguments):
     content = e.content.read().decode()
     exec(content, locals())
-    c = fast.conf.ConfigParser(locals()['p']).config
-    
+    load_config(locals()['p'])
+
+def load_config(p):
+    c = fast.conf.ConfigParser(p).config
     for param in c:
         CONFIG[param].value = c[param]
         change_value(CONFIG[param], c[param], ELEMENTS[param])
@@ -103,7 +105,6 @@ def add_param(param):
                     rad = ui.radio(param._allowed_values, value=param.value).props("inline")
                     elements.append(rad)
 
-
         else:
             # anything left over? 
             raise Exception(f"Param {param.name} not included in gui init")
@@ -112,18 +113,36 @@ def add_param(param):
     
 
 def change_value(param, value, elems):
-    
-    if value in ["auto" or "opt"] or numpy.isinf(value) or value is None:
-        elems[0].set_value(None)
-        elems[1].set_value(True)
-    
-    elif value in [True, False] or isinstance(value, str):
+    print(param.name, value)
+
+    # special cases
+    if param.name in ["MODULATION", "EsN0"]:
         elems[0].set_value(value)
 
-    elif isinstance(value, numpy.ndarray):
+    # None value 
+    elif value is None:
+        elems[0].set_value(None)
+        elems[1].set_value(True)
+
+    # some kind of iterable value
+    elif isinstance(value, (numpy.ndarray, list, tuple)):
         for elem, val in zip(elems, value):
             elem.set_value(val)
 
+    # auto or opt value (same treatment as None)
+    elif value in ["auto", "opt"]:
+        elems[0].set_value(None)
+        elems[1].set_value(True)
+
+    # bool value or other string value 
+    elif value in [True, False] or isinstance(value, str):
+        elems[0].set_value(value)
+
+    # inf value (same treatment as None)
+    elif numpy.isinf(value):
+        elems[0].set_value(None)
+        elems[1].set_value(True)
+    
     
 
 
@@ -168,8 +187,21 @@ def init_sim():
             ui.label(e.args[0])
             ui.button('Close', on_click=dialog.close)
         dialog.open()
+        return
 
+    # if we initialised simulation correctly, lets make some plots 
+    with ui.card():
+        ui.label("Residual Phase PSD")
+        with ui.matplotlib().figure as fig:
+            ax = fig.gca()
+            ax.set_aspect(1)
+            ax.pcolormesh(SIM.freq.f/(2*numpy.pi), SIM.freq.f/(2*numpy.pi), SIM.powerspec, norm=LogNorm())
+            ax.set_xlabel("spatial frequency (1/m)")
+            ax.set_ylabel("spatial frequency (1/m)")
+            fig.colorbar()
+            fig.tight_layout(pad=0)
 
+ui.page_title(f"FAST {fast.__version__}")
 ui.label(f"FAST {fast.__version__}").classes("font-mono text-4xl")
 
 with ui.tabs().classes("w-full") as tabs:
@@ -184,7 +216,7 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
         ui.button("PRINT DEBUG", on_click=lambda x: print(CONFIG))
 
         with ui.column().classes("justify-center"):
-            ui.upload(label="Load Config File", on_upload=load_config).props('accept=.py')
+            ui.upload(label="Load Config File", on_upload=load_config_handler).props('accept=.py')
             
             with ui.row():
                 
@@ -212,5 +244,7 @@ with ui.tab_panels(tabs, value=config_tab).classes("w-full"):
 
     with ui.tab_panel(results_tab):
         ui.label("Results")
+
+# from ..test import test_params
 
 ui.run()
