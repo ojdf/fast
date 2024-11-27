@@ -723,7 +723,7 @@ class Fast():
 
         self.link_budget['transmission_loss'] = 10*numpy.log10(self.params['TRANSMISSION'])
 
-        smf_coupling = 10*numpy.log10(((pupil_r * mode).sum() * dx_r**2)**2)
+        smf_coupling = 10*numpy.log10(((pupil_r * mode).sum() * dx_r)**2 / (mode**2).sum())
         self.link_budget['smf_coupling'] = smf_coupling
 
         self.diffraction_limit = 10**(sum(self.link_budget.values())/10) / 1e3 # W
