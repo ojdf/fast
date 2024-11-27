@@ -136,6 +136,7 @@ class Fast():
         self.result = FastResult(I.flatten(), self.diffraction_limit)
         self.I = self.result.power # backwards compatibility
 
+        logger.info(self.result)
         return self.result
 
     def init_logging(self):
@@ -961,6 +962,34 @@ class FastResult():
     @property
     def scintillation_index(self):
         return (self._r/self._r.mean()).var()
+    
+    @property
+    def avg_power_W(self):
+        return self.power.mean() 
+
+    @property
+    def avg_power_dBm(self):
+        return 10*numpy.log10(self.avg_power_W / 1e-3)
+    
+    @property
+    def avg_power_dB_rel(self):
+        return 10*numpy.log10((self.power / self._dl).mean())
+    
+    @property
+    def avg_power_dB_abs(self):
+        return 10*numpy.log10(self.avg_power_W)
+    
+    def __str__(self):
+        s = \
+        f"""FAST result statistics:
+            Avg. power (W): {self.avg_power_W}
+            Avg. power (dBm): {self.avg_power_dBm}
+            Avg. power (dB_rel): {self.avg_power_dB_rel}
+            Avg. power (dB_abs): {self.avg_power_dB_abs}
+            Scintillation index: {self.scintillation_index}
+        """
+        return s
+
     
 
 def load(fname):
