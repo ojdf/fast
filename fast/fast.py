@@ -142,7 +142,7 @@ class Fast():
     def init_logging(self):
         logging.basicConfig(filename=self.params['LOGFILE'], 
                             level=logging.getLevelName(self.params['LOGLEVEL']),
-                            format="%(name)s.%(funcName)s [%(levelname)s]  %(message)s")
+                            format="[%(levelname)s] %(name)s.%(funcName)s | %(message)s")
 
     def init_frequency_grid(self):
 
