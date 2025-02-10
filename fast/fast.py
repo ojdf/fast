@@ -712,7 +712,7 @@ class Fast():
 
         # eq 9, Klein et al Applied Optics 1974
         # TODO: make this work for axicon (bessel) beams
-        alpha = D_t / w0
+        alpha = D_t / (2*w0)
         gamma = obsc_t / D_t
         g_t = 2/alpha**2 * (numpy.exp(-alpha**2) - numpy.exp(-gamma**2 * alpha**2))**2
         G_t = 10*numpy.log10((numpy.pi * D_t**2) * 4*numpy.pi / self.wvl**2 * g_t)
