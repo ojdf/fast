@@ -2,7 +2,7 @@ import numpy
 from . import funcs
 from . import ao_power_spectra
 from . import conf
-from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime, fouriertransform
+from aotools import circle, cn2_to_r0, isoplanaticAngle, coherenceTime, fouriertransform, rytov_variance
 from astropy.io import fits
 from tqdm import tqdm
 import logging
@@ -264,11 +264,13 @@ class Fast():
         self.r0 = cn2_to_r0(self.params['CN2_TURB'].sum(), lamda=500e-9)
         self.theta0 = isoplanaticAngle(self.params['CN2_TURB'], self.params['H_TURB'], lamda=500e-9)
         self.tau0 = coherenceTime(self.params['CN2_TURB'], self.params['WIND_SPD'], lamda=500e-9)
+        self.rytov_variance = rytov_variance(self.params['CN2_TURB'], self.params['H_TURB'], lamda=500e-9)
 
         # Atmospheric parameters along line of sight (los), at laser wavelength
         self.r0_los = cn2_to_r0(self.cn2.sum(), lamda=self.params['WVL'])
         self.theta0_los = isoplanaticAngle(self.cn2, self.h, lamda=self.params['WVL'])
         self.tau0_los = coherenceTime(self.cn2, self.wind_speed, lamda=self.params['WVL'])
+        self.rytov_variance_los = rytov_variance(self.cn2, self.h, lamda=self.params['WVL'])
 
         self.L0 = self.params['L0']
         self.l0 = self.params['l0']
