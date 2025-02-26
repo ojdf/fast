@@ -792,6 +792,7 @@ class Fast():
         hdr['D_SAT'] = params['D_SAT']
         hdr['OBSC_SAT'] = params['OBSC_SAT']
         hdr['AXICON'] = str(params['AXICON'])
+        hdr['W0'] = self.W0
         hdr['L_SAT'] = self.L
         hdr['H_SAT'] = params['H_SAT']
         hdr['DX'] = self.dx
