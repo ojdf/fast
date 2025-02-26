@@ -178,21 +178,21 @@ class Fast():
             # Make sure enough pixels so aperture is not clipped!
             ap_Npxls = int(2*numpy.ceil(self.params['D_GROUND']/self.dx/2)) + 2 
             
-            if self.params['AO_MODE'] == 'NOAO' and not numpy.isinf(self.params['L0']):
-                # Choose number of pixels so that the phase screen is 2x outer scale
-                L0_Npxls = int(2 * numpy.ceil((self.params['L0'] * 2) / self.dx) / 2)
-            else:
-                L0_Npxls = 0
-
             if self.params['TEMPORAL']:
                 # need enough pixels to not wrap 
                 temporal_Npxls = int(self.params['WIND_SPD'].max() * self.params['DT'] * self.params['NITER'] / self.params['DX'] / 2)
             else:
                 temporal_Npxls = 0
 
-            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, L0_Npxls, temporal_Npxls])
+            self.Npxls = numpy.max([nyq_Npxls, ap_Npxls, temporal_Npxls])
 
             logger.info(f"Auto set NPXLS to {self.Npxls}")
+
+            if self.params['AO_MODE'] == 'NOAO' and not numpy.isinf(self.params['L0']):
+                # Choose number of pixels so that the phase screen is 2x outer scale
+                L0_Npxls = int(2 * numpy.ceil((self.params['L0'] * 2) / self.dx) / 2)
+                if L0_Npxls > self.Npxls:
+                    logger.warning(f"L0 set with NOAO mode, low orders may be undersampled. Recommended NPXLS: {L0_Npxls}")
 
         else:
             self.Npxls = self.params['NPXLS']
