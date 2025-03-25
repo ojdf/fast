@@ -1,0 +1,271 @@
+fast.fast
+=========
+
+.. py:module:: fast.fast
+
+
+
+
+
+
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: Fast(params)
+
+   Base class of the FAST simulation. 
+
+   This object is should be created in order to initialise and run simulations,
+   providing a ``params`` object with simulation parameters/configuration. The 
+   ``params`` object may either be a string, in which case it should point to 
+   the location of a config file, i.e. 
+
+       sim = fast.Fast("/path/to/config.py")
+
+   or a dictionary containing the relevant config information, i.e. 
+
+       | p = config_dict 
+       | sim = fast.Fast(p)
+
+   An example params file is located in ``test/test_params.py``. 
+
+   Once created, the simulation will have computed everything required apart 
+   from the Monte Carlo phase screens. This is the most computationally expensive 
+   operation and is started by calling the ``run`` method on the object, i.e.
+
+       I = sim.run()
+
+   This will return a 1D numpy array of values, which are also stored in ``sim.I``. 
+   These values are normalised to the diffraction limit (i.e. no turbulence). To 
+   obtain absolute values of e.g. received power, one can multiply by the 
+   ``sim.diffraction_limit`` parameter which is precomputed based on the link 
+   parameters. A full link budget is stored in ``sim.link_budget``.
+
+   Attributes:
+       I (ndarray): 1D data array storing results of simulation, normalised to 
+           diffraction limit. Created after running ``sim.run()``.
+
+       link_budget (dict): Dictionary containing link budget terms, calculated 
+           at simulation initialisation.
+
+       powerspec (ndarray): 2D AO-corrected residual phase power spectrum. 
+
+       params (dict): Parameter dictionary
+
+       r0 (float): Fried parameter @ 500nm @ zenith
+
+       theta0 (float): Isoplanatic angle @ 500nm @ zenith
+
+       tau0 (float): Coherence time @ 500nm @ zenith
+
+   Args:
+       params (str): file name of config file 
+       OR
+       params (dict): config dict
+
+
+   .. py:attribute:: conf
+
+
+   .. py:attribute:: params
+
+
+   .. py:attribute:: Niter
+
+
+   .. py:attribute:: Nchunks
+
+
+   .. py:attribute:: fftw
+
+
+   .. py:attribute:: nthreads
+
+
+   .. py:attribute:: seed
+
+
+   .. py:attribute:: temporal
+
+
+   .. py:attribute:: dt
+
+
+   .. py:attribute:: fftw_objs
+      :value: None
+
+
+
+   .. py:method:: run()
+
+
+   .. py:method:: init_logging()
+
+
+   .. py:method:: init_frequency_grid()
+
+
+   .. py:method:: init_atmos()
+
+
+   .. py:method:: init_beam_params()
+
+
+   .. py:method:: init_ao_params()
+
+
+   .. py:method:: init_pupil_mask()
+
+
+   .. py:method:: init_fftw()
+
+
+   .. py:method:: init_phs_logamp()
+
+
+   .. py:method:: compute_powerspec()
+
+
+   .. py:method:: compute_phs(chunk=0)
+
+
+   .. py:method:: compute_phs_temporal(chunk=0)
+
+
+   .. py:method:: compute_logamp()
+
+
+   .. py:method:: compute_detector(chunk=0)
+
+
+   .. py:method:: compute_link_budget()
+
+      Compute analytical losses/gains that affect the link. These are:
+
+      power: Laser power expressed in [dBm]
+      free_space: Losses due to free space propagation [dB]
+      transmitter_gain: Gain due to transmitter [dBi]
+      receiver_gain: Gain due to receiver [dBi]
+      transmission_loss: Loss due to atmospheric transmission [dB]        
+      smf_coupling: Losses due to coupling into single mode fibre [dB] (NOTE: this 
+          refers to diffraction limited loss, does not include any 
+          turbulence effects on the coupling)
+
+
+
+
+   .. py:method:: compute_mean_irradiance(onaxis=True)
+
+      FAST method using Fourier model (no Monte Carlo element)
+
+
+
+   .. py:method:: calc_zenith_correction(zenith_angle)
+
+
+   .. py:method:: set_seed(seed)
+
+
+   .. py:method:: make_header(params)
+
+
+   .. py:method:: save(fname, **kwargs)
+
+
+.. py:class:: SpatialFrequencies(N, dx)
+
+   .. py:attribute:: N
+
+
+   .. py:attribute:: dx
+
+
+   .. py:attribute:: fx
+
+
+   .. py:attribute:: fy
+
+
+   .. py:attribute:: fabs
+
+
+   .. py:attribute:: f
+
+
+   .. py:attribute:: df
+
+
+   .. py:method:: make_main_freqs(N, dx)
+
+
+   .. py:method:: make_subharm_freqs(pmax=3)
+
+
+   .. py:method:: make_temporal_freqs(nlayer, Ny, Nx, wind_speed, wind_dir, dt)
+
+
+   .. py:method:: make_logamp_freqs(Nx=None, dx=None, Ny=None, dy=None)
+
+
+.. py:class:: SpatialFrequencyStruct(fx_axis, fy_axis=None, rot=None, freq_per_layer=False)
+
+   .. py:attribute:: fx_axis
+
+
+   .. py:attribute:: freq_per_layer
+      :value: False
+
+
+
+   .. py:attribute:: fabs
+
+
+   .. py:method:: realspace_sampling()
+
+
+.. py:class:: FastResult(random_iters, diffraction_limit, header=None)
+
+   Allows rapid conversion between useful units for FAST results without having 
+   to do all the conversions unless you need to.
+
+   Attributes: 
+       dB_rel: results in dB relative to diffraction limit (no turbulence)
+       dB_abs: results in dB including all terms in link budget (i.e. received power/launched power)
+       dBm: results in dBm, including all terms in link budget
+       power: results in received power, units of Watts
+       scintillation_index: scintillation index (variance of power/power.mean())
+
+
+   .. py:property:: dB_rel
+
+
+   .. py:property:: dB_abs
+
+
+   .. py:property:: dBm
+
+
+   .. py:property:: power
+
+
+   .. py:property:: scintillation_index
+
+
+   .. py:property:: avg_power_W
+
+
+   .. py:property:: avg_power_dBm
+
+
+   .. py:property:: avg_power_dB_rel
+
+
+   .. py:property:: avg_power_dB_abs
+
+
+.. py:function:: load(fname)
+

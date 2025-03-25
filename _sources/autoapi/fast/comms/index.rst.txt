@@ -1,0 +1,233 @@
+fast.comms
+==========
+
+.. py:module:: fast.comms
+
+.. autoapi-nested-parse::
+
+   Functions regarding optical communications
+
+
+
+
+
+
+
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: Modulator(power, modulation, EsN0=None, symbols_per_iter=1000, data=None)
+
+   Takes array of optical powers and modulates/demodulates according to a modulation
+   scheme (OOK, BPSK, QPSK, QAM, etc) with random bits. Can add AWGN at a given
+   average signal-to-noise ratio.
+
+   This allows Monte Carlo computation of bit error rate or symbol error probability.
+
+   Parameters:
+       power (numpy.ndarray): array of optical powers
+       modulation (string): modulation scheme
+       EsN0 (float, optional): (average) symbol signal to noise ratio
+       symbols_per_iter (int, optional): Number of symbols per iteration of FAST.
+           Defaults to 1000.
+
+
+   .. py:attribute:: power
+
+
+   .. py:attribute:: amplitude
+
+
+   .. py:attribute:: modulation
+
+
+   .. py:attribute:: symbols_per_iter
+      :value: 1000
+
+
+
+   .. py:attribute:: EsN0
+      :value: None
+
+
+
+   .. py:attribute:: data
+      :value: None
+
+
+
+   .. py:method:: generate_symbols()
+
+
+   .. py:method:: modulate()
+
+
+   .. py:method:: demodulate()
+
+
+   .. py:method:: compute_sep()
+
+      Symbol error probability, from random bits
+
+
+
+   .. py:method:: compute_evm()
+
+      Error Vector Magnitude (EVM), from random bits
+
+
+
+   .. py:method:: run()
+
+
+.. py:class:: FastFSOC(*args, **kwargs)
+
+
+
+   Subclass of Fast simulation object, adds optical comms functionality
+   (modulation, demodulation, generating random symbol sequences for testing)
+
+
+   .. py:attribute:: modulation
+
+
+   .. py:attribute:: EsN0
+
+
+   .. py:method:: run()
+
+
+   .. py:method:: make_header(params)
+
+
+.. py:function:: fade_prob(I, threshold, min_fades=30)
+
+.. py:function:: fade_dur(I, threshold, dt=1, min_fades=30)
+
+.. py:function:: ber_ook(EbN0, samples=None)
+
+   Bit Error Rate for On-Off-Keying communications channel.
+
+   Monte Carlo integration of Eq. 58 from Andrews and Phillips (2005) Ch 11.
+   Note that electrical SNR per bit (Eb/N0) is used, not OSNR as in A+P.
+
+   Args:
+       EbN0 (float): average signal-to-noise ratio per bit Eb/N0 in electrical domain, dB
+       samples (numpy.ndarray, optional): random samples of received power from FAST.
+           If None is provided, assume no atmosphere (i.e. intensity pdf = delta function)
+
+   Returns:
+       Bit error rate for OOK
+
+
+.. py:function:: sep_qam(M, EsN0, samples=None)
+
+   Symbol error probabilty for square M-ary QAM, from Rice.
+
+   Parameters:
+       M (int): Number of symbols (must be perfect square)
+       EsN0 (float): Average electrical symbol signal-to-noise ratio [dB]
+       samples (numpy.ndarray, optional): random samples of received power from FAST.
+
+
+.. py:function:: ber_qam(M, EbN0, samples=None)
+
+   Bit error rate for square M-ary QAM, from Rice. Assumes only nearest neighbour
+   bit errors and Gray coding, i.e. 1 bit error per symbol error.
+
+   Parameters:
+       M (int): Number of symbols (must be perfect square)
+       EbN0 (float): Average electrical signal-to-noise ratio per bit [dB]
+       samples (numpy.ndarray, optional): random samples of received power from FAST.
+
+
+.. py:function:: Q(x)
+
+   Q function from Rice book
+
+
+.. py:function:: generalised_mutual_information_qam(samples, M, npxls, EsN0, N0=None, shot=False)
+
+   Generalised Mutual Information (GMI), adapted from Alvarado et al (2016)
+   [10.1109/JLT.2015.2450537] and Cho et al (2017) [10.1109/ECOC.2017.8345872].
+
+   Assumes
+       1) Perfect interleaving (no correlation between bits)
+       2) Bit-wise decoder (no memory of other bits sent)
+       3) Gray encoding of QAM symbols
+       4) Soft decision decoding with FEC
+
+   Args:
+       samples (numpy.ndarray): Array of Monte Carlo complex field measurements or amplitudes
+       M (int): number of symbols (must be perfect square)
+       npxls (int): Number of pixels to use for binning
+       EsN0 (float): Symbol signal-to-noise ratio [dB]
+       N0 (float, optional): Noise variance (overrides EsN0, can be set to 0)
+
+   Returns:
+       GMI (float): the generalised mutual information value, in bits/symbol
+
+
+.. py:function:: mutual_information_qam(samples, M, npxls, EsN0, N0=None, shot=False)
+
+   Equation 16 from Alvarado et al (2016) 10.1109/JLT.2015.2450537.
+
+   This is for a memoryless receiver (no knowledge of other bits transmitted)
+
+
+.. py:function:: convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size='individual', shot=False)
+
+   Method of computing received I-Q plane for M-ary QAM under AWGN assumptions
+   given a series of complex field measurements.
+
+   Bins the Monte Carlo field measurements into a 2D array of npxls x npxls bins.
+   The overall size of the 2d array is determined by the decision region size,
+   which depends on the M-ary QAM constellation. This is then convolved with a
+   gaussian to include AWGN.
+
+   By integrating this distribution, and averaging over all constellation regions,
+   we can obtain the probability that a transmitted symbol ends up outside the
+   decision region, i.e. a symbol error. This [may be] more robust than simply
+   adding AWGN to the individual Monte Carlo datapoints, because that method
+   is limited by the number of samples.
+
+   Args:
+       samples (numpy.ndarray): Array of Monte Carlo complex field measurements or amplitudes
+       M (int): number of symbols (must be perfect square)
+       npxls (int): Number of pixels to use for binning
+       EsN0 (float): Symbol signal-to-noise ratio [dB]
+       N0 (float, optional): Noise variance (overrides EsN0, can be set to 0)
+       separate (bool, optional): Separate each region of the constellation (default: True)
+       region_size (str, optional): "individual" or "full" region to define the PDF (default: "individual")
+
+   Returns:
+       out (numpy.ndarray): (nsymbols x npxls x npxls) array consisting of the
+           binned histogram for each symbol.
+
+
+.. py:function:: define_constellation(modulation)
+
+   Define constellations for coherent modulation schemes. Schemes supported:
+
+   OOK - On-Off Keying
+   BPSK - Binary Phase Shift Keying
+   QPSK - Quadrature Phase Shift Keying
+   QAM - Quadrature Amplitude Modulation
+   M-PSK - M-ary PSK (e.g. 16-PSK)
+   M-QAM - M-ary QAM (e.g. 16-QAM)
+
+   Parameters:
+       modulation (string): Modulation scheme (e.g. "BPSK" or "64-QAM")
+
+   Returns:
+       constellation (numpy.ndarray): Complex array representing the constellation,
+           of dimension (nsymbols), real and imaginary parts correspond to the
+           two axes of the modulation.
+
+
+.. py:function:: flip_bits(data, ber)
+
