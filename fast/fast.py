@@ -649,7 +649,7 @@ class Fast():
         pupil = self.pupil * self.pupil_mode
 
         phase_component = (pupil * numpy.exp(1j * self.phs)).sum((1,2)) * self.dx**2
-        logamp_component = numpy.exp(2*self.logamp[chunk*self.Niter_per_chunk:(chunk+1)*self.Niter_per_chunk])
+        logamp_component = numpy.exp(self.logamp[chunk*self.Niter_per_chunk:(chunk+1)*self.Niter_per_chunk])
 
         self.random_iters = logamp_component * phase_component
         normalisation = pupil.sum() * self.dx**2
