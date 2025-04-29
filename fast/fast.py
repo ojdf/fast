@@ -717,7 +717,7 @@ class Fast():
         alpha = D_t / (2*w0)
         gamma = obsc_t / D_t
         g_t = 2/alpha**2 * (numpy.exp(-alpha**2) - numpy.exp(-gamma**2 * alpha**2))**2
-        G_t = 10*numpy.log10((numpy.pi * D_t**2) * 4*numpy.pi / self.wvl**2 * g_t)
+        G_t = 10*numpy.log10((numpy.pi * (D_t/2)**2) * 4*numpy.pi / self.wvl**2 * g_t)
         self.link_budget['transmitter_gain'] = G_t
 
         A = numpy.pi * ((D_r/2)**2 - (obsc_r/2)**2)
