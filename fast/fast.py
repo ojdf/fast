@@ -804,6 +804,8 @@ class Fast():
         hdr["DIFFLIM"] = self.diffraction_limit
         if self.seed != None:
             hdr["SEED"] = self.seed
+        if self.temporal:
+            hdr['DT'] = self.dt
         return hdr
 
     def save(self, fname, **kwargs):
