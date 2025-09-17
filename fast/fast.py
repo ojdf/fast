@@ -853,8 +853,8 @@ class SpatialFrequencies():
         
         for i in range(nlayer):
             dx = wind_speed[i] * dt
-            # df_temporal = 2 * numpy.pi / (Nx * dx)
-            df_temporal = 1 / (Nx * dx) # NOTE Linear spatial frequency here!!!
+            df_temporal = 2 * numpy.pi / (Nx * dx)
+            # df_temporal = 1 / (Nx * dx) # NOTE Linear spatial frequency here!!!
 
             # define x axis according to temporal requirements, and y axis 
             # same as the main y axis, since we will integrate over this one
