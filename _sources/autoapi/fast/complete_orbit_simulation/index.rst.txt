@@ -1,0 +1,91 @@
+fast.complete_orbit_simulation
+==============================
+
+.. py:module:: fast.complete_orbit_simulation
+
+
+
+
+
+
+Module Contents
+---------------
+
+.. py:data:: ts
+
+.. py:function:: get_satellite_obj(TLE_file_path, satellite_name=None)
+
+   Function to directly obtain a skyfield satellite object from a TLE and a satellite name (if different TLEs in the file)
+
+   INPUTS:
+       TLE_file_path : [string] - path to a local or online TLE file
+       satellite_name : [string] - Name of the satellite to look at if different satellites are present in the same file
+
+   OUTPUTS:
+       satellite : the corresponding skyfield satellite object
+
+
+
+.. py:function:: get_sample_time(satellite, tele_lat, tele_lon, N=10, start=None, period=10, min_altitude_degrees=5.0, max_altitude_degree=90.0, zenith_stop=False)
+
+   Function to "sample" a satellite orbit passing over a telescop. 
+   Research - on a given period - a moment when the sattelite is visible by the telescop, obtain the rising and falling times, and then samples this last period.
+   The function returns the sampled times (in [s]) as a list of int values starting at 0, and the initial time t0 as a datetime object. 
+
+   INPUTS:
+       satellite : a skyfield satellite object 
+       tele_lat/tele_lon : [float] - latitude and longitude of the telescop
+       N : [int] -  Number of samples expected
+       start : [datetime object] - starting epoch for the research of a period when the satellite is visible by the telecsop. Current time by default.
+       period : [int] - the time range in which the research is proceed (given in [days])
+       min_altitude_degrees : [float] - minimum satellite altitude expected 
+       max_altitude_degrees : [float] - maximum satellite altitude considered
+       zenith_stop : [bool] - if True, the sampling is done between min_altitude_degrees and max_altitude_degrees, instead of min_altitude_degrees/min_altitude_degrees
+
+   OUTPUTS:
+       sample_times : [int list] - delay between t0 and each sample (in [s])
+       t0 : [datetime] - epoch of the first sample, given in UTC reference system.
+
+
+
+.. py:function:: get_angles_positions(sample_times, satellite, tele_lat, tele_lon, t_rise, Tloop, rotations=False)
+
+   Function to obtain the Point-Ahead Angle (PAA), or the apparent wind equivalent angle, on each given sample time.
+
+   INPUTS:
+       t_rise = [datetime] - epoch of the first sample, in the UTC reference system
+       sample_times = [int list] - delay between t_rise and each sample (in [s])
+       satellite = a skyfield satellite object 
+       tele_lat/tele_lon = [float] - latitude and longitude of the telescop
+       Tloop = [float] - AO loop delay (in [s])
+
+   OUTPUTS:
+       paa = [float list] - PAAs 
+       aniso_dl = [float list] - anisoplanetism angle for the downlink
+       altitudes = [float list] - altitude of the satellite on each sample (in [°])
+       azimuts = [float list] - azimut of the satellite on each sample (in [°])
+       distances = [float list] - distance between the satellite and the telescop on each sample (in [m])
+       rotations = [float list] - telescop Field of View rotation on each sample (in [°])
+
+
+
+.. py:function:: FAST_sat_orbit(fast_params, simu_params, TLE_file)
+
+   Function that samples an satellite orbit - while this satellite is passing over a telescop - and generate a FAST simualtion object for each sample.
+
+   INPUTS :
+       fast_params = [dic] - parameters for the fast simulation
+       simu_params = [dic] - complementary parameters associated to this simulation
+       TLE_fil = [string] - path to a local or online TLE file
+       cn2_turb = [float list] - Cn^2 profile ( in [m^1/3])
+       wind_speed = [float list] - wind speed profile (in [m/s])
+       wind_dir = [float list] - wind direction profile (in [°])
+       h_turb = [float list] - height associated to the previous profiles (in [m])
+
+   OUTPUTS :
+       sampled_fast_sim = [dic] - a dictionary containing all the FAST simulation objects and the list of the associated altitudes. The dictionary keays are wrote : 'simulation_idx', with idx in [0, N-1]
+
+
+
+.. py:function:: FAST_sat(sat_apparent_speed, fast_params)
+

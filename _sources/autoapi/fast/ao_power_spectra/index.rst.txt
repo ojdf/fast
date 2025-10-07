@@ -1,0 +1,41 @@
+fast.ao_power_spectra
+=====================
+
+.. py:module:: fast.ao_power_spectra
+
+
+
+
+Module Contents
+---------------
+
+.. py:function:: zernike_ft(fabs, phi, D, n_noll)
+
+.. py:function:: zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None)
+
+.. py:function:: zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, plusminus=False)
+
+.. py:function:: piston_gtilt_filter(fabs, fx, fy, D)
+
+.. py:function:: piston_filter(fabs, D)
+
+.. py:function:: tiptilt_filter(fabs, D)
+
+.. py:function:: piston_tiptilt_filter(fabs, D)
+
+.. py:function:: mask_lf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False)
+
+.. py:function:: mask_hf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False)
+
+.. py:function:: Jol_noise_openloop(freq, Dsubap, noise_variance, lf_mask)
+
+.. py:function:: Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None, lmax=3, kmax=3, L0=numpy.inf, l0=1e-06)
+
+.. py:function:: G_AO_PAOLA(freq, mask, mode='AO', h=None, v=None, dtheta=[0, 0], Tx=None, wvl=None, Zmax=None, tl=0, Delta_t=0, Dsubap=None, modal=False, modal_mult=1)
+
+.. py:function:: logamp_powerspec(freq, h, cn2, wvl, pupilfilter=None, layer=True, L0=numpy.inf, l0=1e-06)
+
+.. py:function:: DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None)
+
+.. py:function:: G_AO_PAOLA_closedloop(fx, fy, fabs, h, dtheta=[0, 0], Delta_t=0.0, tl=0.0, gloop=1.0, v=None, dsubap=None, DM='perfect', Zmax=None, D=None, nu=1, modal=False, modal_mult=1)
+
