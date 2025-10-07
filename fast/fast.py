@@ -180,7 +180,7 @@ class Fast():
             
             if self.params['TEMPORAL']:
                 # need enough pixels to not wrap 
-                temporal_Npxls = int(self.params['WIND_SPD'].max() * self.params['DT'] * self.params['NITER'] / self.params['DX'] / 2)
+                temporal_Npxls = int(self.params['WIND_SPD'].max() * self.params['DT'] * self.params['NITER'] / self.dx / 2)
             else:
                 temporal_Npxls = 0
 
